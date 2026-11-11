@@ -8,6 +8,7 @@ import {
   Pressable,
   Animated,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Button from './Button';
@@ -17,25 +18,90 @@ import { formatPrice, formatDate } from '../lib/messaging';
 /** Pick a fitting Ionicon based on the device name (phone, PC, TV, console, etc.) */
 function getDeviceIcon(appareil = '') {
   const s = appareil.toLowerCase();
-  if (s.includes('pc') || s.includes('hp') || s.includes('dell') || s.includes('mac') || s.includes('lenovo') || s.includes('ordinateur') || s.includes('laptop')) {
+  if (
+    s.includes('pc') ||
+    s.includes('hp') ||
+    s.includes('dell') ||
+    s.includes('mac') ||
+    s.includes('lenovo') ||
+    s.includes('ordinateur') ||
+    s.includes('laptop')
+  ) {
     return 'laptop-outline';
   }
-  if (s.includes('tv') || s.includes('télé') || s.includes('tele') || s.includes('écran') || s.includes('ecran')) {
+  if (
+    s.includes('tv') ||
+    s.includes('télé') ||
+    s.includes('tele') ||
+    s.includes('écran') ||
+    s.includes('ecran')
+  ) {
     return 'tv-outline';
   }
-  if (s.includes('ps4') || s.includes('ps5') || s.includes('xbox') || s.includes('switch') || s.includes('console')) {
+  if (
+    s.includes('ps4') ||
+    s.includes('ps5') ||
+    s.includes('xbox') ||
+    s.includes('switch') ||
+    s.includes('console')
+  ) {
     return 'game-controller-outline';
   }
   if (s.includes('ipad') || s.includes('tab') || s.includes('tablette')) {
     return 'tablet-portrait-outline';
   }
-  if (s.includes('jbl') || s.includes('baffe') || s.includes('ampli') || s.includes('enceinte') || s.includes('radio')) {
+  if (
+    s.includes('jbl') ||
+    s.includes('baffe') ||
+    s.includes('ampli') ||
+    s.includes('enceinte') ||
+    s.includes('radio')
+  ) {
     return 'volume-high-outline';
   }
-  if (s.includes('micro') || s.includes('ventil') || s.includes('fer') || s.includes('frigo') || s.includes('clim')) {
+  if (
+    s.includes('micro') ||
+    s.includes('ventil') ||
+    s.includes('fer') ||
+    s.includes('frigo') ||
+    s.includes('clim')
+  ) {
     return 'flash-outline';
   }
-  return 'hardware-chip-outline';
+  return 'phone-portrait-outline';
+}
+
+function getStatusMeta(statut) {
+  if (statut === 'pret') {
+    return {
+      label: 'Réparé · Prêt à récupérer',
+      icon: 'checkmark-circle',
+      fg: colors.success,
+      bg: colors.badgeGreen,
+    };
+  }
+  if (statut === 'non_repare') {
+    return {
+      label: 'Non réparé · À récupérer',
+      icon: 'close-circle',
+      fg: colors.dangerDark || colors.danger,
+      bg: colors.badgeRed || colors.dangerSoft,
+    };
+  }
+  if (statut === 'livre') {
+    return {
+      label: 'Récupéré par le client',
+      icon: 'bag-check-outline',
+      fg: colors.textSecondary,
+      bg: '#E2E8F0',
+    };
+  }
+  return {
+    label: 'En cours de réparation',
+    icon: 'time-outline',
+    fg: colors.sms,
+    bg: colors.badgeBlue,
+  };
 }
 
 export default function RepairCard({
@@ -43,10 +109,14 @@ export default function RepairCard({
   index = 0,
   onWhatsApp,
   onSms,
+  onUnrepaired,
   onDelivered,
+  onEdit,
+  onDelete,
   busy,
 }) {
-  const isReady = fiche.statut === 'pret';
+  const statusMeta = getStatusMeta(fiche.statut);
+  const isDelivered = fiche.statut === 'livre';
   const [viewerOpen, setViewerOpen] = useState(false);
 
   // Staggered entrance animation when cards appear / scroll into view
@@ -92,7 +162,7 @@ export default function RepairCard({
         },
       ]}
     >
-      {/* Top row: thumbnail + customer + status badge */}
+      {/* Top row: thumbnail + customer + status badge + Edit/Delete buttons */}
       <View style={styles.headerRow}>
         {fiche.photo_url ? (
           <Pressable
@@ -124,24 +194,49 @@ export default function RepairCard({
             <Text style={styles.name} numberOfLines={1}>
               {fiche.client_nom}
             </Text>
+            <View style={styles.cardActionsTop}>
+              <Pressable
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                  onEdit?.(fiche);
+                }}
+                disabled={busy}
+                style={({ pressed }) => [
+                  styles.iconActionBtn,
+                  styles.editActionBtn,
+                  pressed && { opacity: 0.75 },
+                ]}
+              >
+                <Ionicons name="create-outline" size={15} color={colors.accent} />
+                <Text style={styles.editActionText}>Modifier</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+                  onDelete?.(fiche);
+                }}
+                disabled={busy}
+                style={({ pressed }) => [
+                  styles.iconActionBtn,
+                  styles.deleteActionBtn,
+                  pressed && { opacity: 0.75 },
+                ]}
+              >
+                <Ionicons name="trash-outline" size={15} color={colors.danger} />
+              </Pressable>
+            </View>
           </View>
+
           <View style={styles.phoneRow}>
             <Ionicons name="call-outline" size={13} color={colors.muted} />
             <Text style={styles.phone}>{fiche.client_tel}</Text>
           </View>
-          <View style={[styles.badge, isReady ? styles.badgeReady : styles.badgeWip]}>
-            <Ionicons
-              name={isReady ? 'checkmark-circle' : 'time-outline'}
-              size={13}
-              color={isReady ? colors.success : colors.sms}
-            />
-            <Text
-              style={[
-                styles.badgeText,
-                { color: isReady ? colors.success : colors.sms },
-              ]}
-            >
-              {isReady ? 'Client prévenu (Prêt)' : 'En cours de réparation'}
+
+          <View style={[styles.badge, { backgroundColor: statusMeta.bg }]}>
+            <Ionicons name={statusMeta.icon} size={13} color={statusMeta.fg} />
+            <Text style={[styles.badgeText, { color: statusMeta.fg }]}>
+              {statusMeta.label}
             </Text>
           </View>
         </View>
@@ -178,7 +273,7 @@ export default function RepairCard({
       </View>
 
       <Text style={styles.actionTitle}>
-        Appareil terminé ? Préviens le client en un clic :
+        Prévenir {fiche.client_nom} (Réparé ou Non réparé) :
       </Text>
       <View style={styles.actions}>
         <Button
@@ -200,23 +295,78 @@ export default function RepairCard({
         />
       </View>
 
-      <Animated.View style={{ transform: [{ scale: doneScale }] }}>
+      {/* Dedicated button when repair failed: "Ça n'a pas marché — venez chercher l'appareil" */}
+      <Pressable
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+          onUnrepaired?.(fiche);
+        }}
+        disabled={busy}
+        style={({ pressed }) => [
+          styles.unrepairedBtn,
+          fiche.statut === 'non_repare' && styles.unrepairedBtnActive,
+          pressed && { opacity: 0.82 },
+        ]}
+      >
+        <Ionicons
+          name="close-circle-outline"
+          size={18}
+          color={colors.dangerDark || colors.danger}
+        />
+        <Text style={styles.unrepairedBtnText}>
+          Ça n'a pas marché · Venez chercher l'appareil
+        </Text>
+      </Pressable>
+
+      {/* Bottom row: Delivered + Delete */}
+      <View style={styles.bottomActionsRow}>
+        <Animated.View style={{ flex: 1, transform: [{ scale: doneScale }] }}>
+          <Pressable
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+              onDelivered?.(fiche);
+            }}
+            onPressIn={() => bounce(doneScale, 0.96)}
+            onPressOut={() => bounce(doneScale, 1)}
+            disabled={busy}
+            style={[
+              styles.deliveredBtn,
+              isDelivered && styles.deliveredBtnDone,
+            ]}
+          >
+            <Ionicons
+              name={isDelivered ? 'bag-check' : 'checkmark-done-circle-outline'}
+              size={18}
+              color={isDelivered ? colors.success : colors.textSecondary}
+            />
+            <Text
+              style={[
+                styles.deliveredText,
+                isDelivered && { color: colors.success },
+              ]}
+            >
+              {isDelivered
+                ? 'Appareil récupéré (Remettre en atelier)'
+                : 'Le client a récupéré son appareil'}
+            </Text>
+          </Pressable>
+        </Animated.View>
+
         <Pressable
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-            onDelivered?.();
+            onDelete?.(fiche);
           }}
-          onPressIn={() => bounce(doneScale, 0.96)}
-          onPressOut={() => bounce(doneScale, 1)}
           disabled={busy}
-          style={styles.deliveredBtn}
+          style={({ pressed }) => [
+            styles.deleteCardBtn,
+            pressed && { opacity: 0.78 },
+          ]}
         >
-          <Ionicons name="checkmark-done-circle-outline" size={18} color={colors.textSecondary} />
-          <Text style={styles.deliveredText}>
-            Le client a récupéré son appareil
-          </Text>
+          <Ionicons name="trash-outline" size={16} color={colors.danger} />
+          <Text style={styles.deleteCardBtnText}>Supprimer</Text>
         </Pressable>
-      </Animated.View>
+      </View>
 
       {/* Fullscreen photo viewer */}
       {fiche.photo_url ? (
@@ -278,7 +428,7 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
     ...shadow,
   },
-  headerRow: { flexDirection: 'row', alignItems: 'center' },
+  headerRow: { flexDirection: 'row', alignItems: 'flex-start' },
   thumbWrap: {
     width: 72,
     height: 72,
@@ -303,8 +453,40 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  titleRow: { flexDirection: 'row', alignItems: 'center' },
-  name: { fontSize: 18, fontWeight: '800', color: colors.text },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  name: { flex: 1, fontSize: 17, fontWeight: '800', color: colors.text, marginRight: 6 },
+  cardActionsTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  iconActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  editActionBtn: {
+    backgroundColor: colors.accentSoft,
+    borderColor: '#BFDBFE',
+    marginRight: 6,
+  },
+  editActionText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.accent,
+    marginLeft: 3,
+  },
+  deleteActionBtn: {
+    backgroundColor: colors.dangerSoft,
+    borderColor: '#FECACA',
+    paddingHorizontal: 7,
+  },
   phoneRow: { flexDirection: 'row', alignItems: 'center', marginTop: 3 },
   phone: { fontSize: 13, fontWeight: '600', color: colors.muted, marginLeft: 5 },
   badge: {
@@ -316,8 +498,6 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     marginTop: 7,
   },
-  badgeWip: { backgroundColor: colors.badgeBlue },
-  badgeReady: { backgroundColor: colors.badgeGreen },
   badgeText: { fontSize: 12, fontWeight: '800', marginLeft: 5 },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: 12 },
   infoBox: {
@@ -353,22 +533,71 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   actions: { flexDirection: 'row' },
-  deliveredBtn: {
-    marginTop: 12,
+  unrepairedBtn: {
+    marginTop: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: '#FFF1F2',
+    borderRadius: radius.sm,
+    borderWidth: 1.5,
+    borderColor: '#FECDD3',
+  },
+  unrepairedBtnActive: {
+    backgroundColor: '#FFE4E6',
+    borderColor: '#FB7185',
+  },
+  unrepairedBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.dangerDark || colors.danger,
+    marginLeft: 6,
+  },
+  bottomActionsRow: {
+    marginTop: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  deliveredBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 10,
     backgroundColor: colors.surface,
     borderRadius: radius.sm,
     borderWidth: 1,
     borderColor: colors.border,
   },
+  deliveredBtnDone: {
+    backgroundColor: colors.badgeGreen,
+    borderColor: '#BBF7D0',
+  },
   deliveredText: {
-    fontSize: 13,
+    fontSize: 12,
     color: colors.textSecondary,
     fontWeight: '700',
     marginLeft: 6,
+  },
+  deleteCardBtn: {
+    marginLeft: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: colors.dangerSoft,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  deleteCardBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: colors.danger,
+    marginLeft: 4,
   },
   modalBg: {
     flex: 1,

@@ -31,7 +31,14 @@ export default function App() {
     return (
       <SafeAreaProvider>
         <StatusBar style="light" />
-        <MainScreen atelier={session} onLogout={() => setSession(null)} />
+        <MainScreen
+          atelier={session}
+          onAtelierUpdated={(updatedProfile) => {
+            setSavedAtelier(updatedProfile);
+            setSession(updatedProfile);
+          }}
+          onLogout={() => setSession(null)}
+        />
       </SafeAreaProvider>
     );
   }

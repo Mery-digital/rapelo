@@ -19,12 +19,16 @@ export const colors = {
   smsDark: '#1D4ED8',
   smsSoft: '#DBEAFE',
   danger: '#EF4444',
+  dangerDark: '#B91C1C',
   dangerSoft: '#FEE2E2',
   warning: '#F59E0B',
+  warningDark: '#B45309',
   warningSoft: '#FEF3C7',
   success: '#16A34A',
   badgeBlue: '#DBEAFE',
   badgeGreen: '#DCFCE7',
+  badgeRed: '#FEE2E2',
+  badgeAmber: '#FEF3C7',
 };
 
 export const radius = { xs: 8, sm: 12, md: 16, lg: 22, xl: 28 };

@@ -82,6 +82,15 @@ export function readyMessage({ clientNom, appareil, prix, atelier }) {
   );
 }
 
+export function unrepairedMessage({ clientNom, appareil, atelier }) {
+  return (
+    `RAPELO\n` +
+    `Bonjour ${clientNom}, concernant votre ${appareil} déposé chez ${atelier.atelierNom} ` +
+    `à ${atelier.localisation} : malheureusement la réparation n'a pas pu aboutir. ` +
+    `Vous pouvez venir récupérer votre appareil à l'atelier. Infoline: ${atelier.phone}`
+  );
+}
+
 // ---------- Opening WhatsApp & SMS ----------
 
 /**
