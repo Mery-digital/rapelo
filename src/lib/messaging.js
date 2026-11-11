@@ -66,6 +66,7 @@ export function formatDate(iso) {
 
 export function depositMessage({ clientNom, appareil, atelier }) {
   return (
+    `RAPELO\n` +
     `Bonjour ${clientNom}, votre ${appareil} a bien été déposé chez ${atelier.atelierNom} ` +
     `à ${atelier.localisation}. On vous prévient dès que c'est prêt ! Infoline: ${atelier.phone}`
   );
@@ -74,6 +75,7 @@ export function depositMessage({ clientNom, appareil, atelier }) {
 export function readyMessage({ clientNom, appareil, prix, atelier }) {
   const price = Number(prix) > 0 ? ` Montant à payer : ${formatPrice(prix)}.` : '';
   return (
+    `RAPELO\n` +
     `Bonjour ${clientNom}, bonne nouvelle ! Votre ${appareil} est prêt. ` +
     `Vous pouvez venir le récupérer chez ${atelier.atelierNom} à ${atelier.localisation}.${price} ` +
     `Infoline: ${atelier.phone}`
