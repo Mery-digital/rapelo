@@ -30,7 +30,15 @@ export default function MainScreen({ atelier, onAtelierUpdated, onLogout }) {
   const [repairs, setRepairs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [editOwnerOpen, setEditOwnerOpen] = useState(false);
+
+  // Atelier profile modal state
+  const [atelierModalOpen, setAtelierModalOpen] = useState(false);
+  // 'info' (view details + logout) | 'unlock' (enter password) | 'edit' (unlocked form)
+  const [atelierStep, setAtelierStep] = useState('info');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [verifyingPwd, setVerifyingPwd] = useState(false);
+
   const [ownerForm, setOwnerForm] = useState({
     atelierNom: atelier.atelierNom || '',
     localisation: atelier.localisation || '',
@@ -39,7 +47,7 @@ export default function MainScreen({ atelier, onAtelierUpdated, onLogout }) {
     newPassword: '',
   });
   const [savingOwner, setSavingOwner] = useState(false);
-  const [logoutModalOpen, setLogoutModalOpen] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
 
   const tabFade = useRef(new Animated.Value(1)).current;
   const tabSlide = useRef(new Animated.Value(0)).current;
@@ -94,7 +102,7 @@ export default function MainScreen({ atelier, onAtelierUpdated, onLogout }) {
     setRepairs((list) => list.filter((r) => !idSet.has(r.id)));
   };
 
-  const openOwnerEditor = () => {
+  const openAtelierModal = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setOwnerForm({
       atelierNom: atelier.atelierNom || '',
@@ -103,7 +111,38 @@ export default function MainScreen({ atelier, onAtelierUpdated, onLogout }) {
       indicatif: digitsOnly(atelier.indicatif) || '225',
       newPassword: '',
     });
-    setEditOwnerOpen(true);
+    setCurrentPassword('');
+    setPasswordError('');
+    setConfirmLogout(false);
+    setAtelierStep('info');
+    setAtelierModalOpen(true);
+  };
+
+  const handleVerifyPassword = async () => {
+    if (!currentPassword) {
+      setPasswordError('Entre ton mot de passe actuel pour pouvoir modifier.');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+      return;
+    }
+    setVerifyingPwd(true);
+    setPasswordError('');
+    try {
+      const enteredHash = await hashPassword(
+        digitsOnly(atelier.phone),
+        currentPassword
+      );
+      if (enteredHash !== atelier.passwordHash) {
+        setPasswordError('Mot de passe incorrect. Modification refusée.');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+        return;
+      }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      setAtelierStep('edit');
+    } catch {
+      setPasswordError('Impossible de vérifier le mot de passe.');
+    } finally {
+      setVerifyingPwd(false);
+    }
   };
 
   const handleSaveOwner = async () => {
@@ -111,6 +150,12 @@ export default function MainScreen({ atelier, onAtelierUpdated, onLogout }) {
     const cleanLoc = ownerForm.localisation.trim();
     const cleanPhone = ownerForm.phone.trim();
     const cleanIndicatif = digitsOnly(ownerForm.indicatif) || '225';
+
+    if (!currentPassword) {
+      setPasswordError('Mot de passe obligatoire pour modifier le compte.');
+      setAtelierStep('unlock');
+      return;
+    }
 
     if (!cleanNom || !cleanLoc || !cleanPhone) {
       Alert.alert(
@@ -133,10 +178,17 @@ export default function MainScreen({ atelier, onAtelierUpdated, onLogout }) {
       const oldTel = digitsOnly(atelier.phone);
       const newTel = digitsOnly(cleanPhone);
 
-      let passwordHash = atelier.passwordHash;
-      if (ownerForm.newPassword) {
-        passwordHash = await hashPassword(newTel, ownerForm.newPassword);
+      // Re-verify current password before saving any change
+      const checkHash = await hashPassword(oldTel, currentPassword);
+      if (checkHash !== atelier.passwordHash) {
+        setPasswordError('Mot de passe incorrect. Modification refusée.');
+        setAtelierStep('unlock');
+        return;
       }
+
+      // If phone changed or a new password was provided, compute the new passwordHash
+      const passwordToKeep = ownerForm.newPassword || currentPassword;
+      const passwordHash = await hashPassword(newTel, passwordToKeep);
 
       const updatedProfile = {
         ...atelier,
@@ -160,7 +212,7 @@ export default function MainScreen({ atelier, onAtelierUpdated, onLogout }) {
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       onAtelierUpdated?.(updatedProfile);
-      setEditOwnerOpen(false);
+      setAtelierModalOpen(false);
     } catch (e) {
       Alert.alert('Erreur', e?.message || "Impossible d'enregistrer les modifications.");
     } finally {
@@ -169,6 +221,9 @@ export default function MainScreen({ atelier, onAtelierUpdated, onLogout }) {
   };
 
   const activeCount = repairs.filter((r) => r.statut !== 'livre').length;
+  const countryInfo = COUNTRY_DIAL_CODES.find(
+    (c) => c.code === (digitsOnly(atelier.indicatif) || '225')
+  );
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
@@ -178,14 +233,22 @@ export default function MainScreen({ atelier, onAtelierUpdated, onLogout }) {
         end={{ x: 1, y: 1 }}
         style={styles.header}
       >
-        <View style={styles.brandBadge}>
+        {/* Appuyer sur le logo ou le nom ouvre les infos de l'atelier */}
+        <Pressable
+          onPress={openAtelierModal}
+          style={({ pressed }) => [
+            styles.brandBadge,
+            pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] },
+          ]}
+        >
           <Image
             source={require('../../assets/logo.jpg')}
             style={styles.brandLogo}
             resizeMode="contain"
           />
-        </View>
-        <Pressable onPress={openOwnerEditor} style={{ flex: 1 }}>
+        </Pressable>
+
+        <Pressable onPress={openAtelierModal} style={{ flex: 1 }}>
           <Text style={styles.atelier} numberOfLines={1}>
             {atelier.atelierNom}
           </Text>
@@ -197,28 +260,19 @@ export default function MainScreen({ atelier, onAtelierUpdated, onLogout }) {
           </View>
         </Pressable>
 
-        {/* Bouton Modifier la fiche propriétaire / atelier */}
+        {/* Seul bouton en haut à droite : Atelier (contient infos, modification protégée & déconnexion) */}
         <Pressable
-          onPress={openOwnerEditor}
-          style={({ pressed }) => [styles.headerBtn, pressed && { opacity: 0.7 }]}
+          onPress={openAtelierModal}
+          style={({ pressed }) => [styles.headerBtn, pressed && { opacity: 0.75 }]}
         >
-          <Ionicons name="create-outline" size={16} color="#FFFFFF" />
+          <Ionicons name="storefront-outline" size={16} color="#FFFFFF" />
           <Text style={styles.headerBtnText}>Atelier</Text>
-        </Pressable>
-
-        <Pressable
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-            setLogoutModalOpen(true);
-          }}
-          style={({ pressed }) => [
-            styles.headerBtn,
-            { marginLeft: 7 },
-            pressed && { opacity: 0.7 },
-          ]}
-        >
-          <Ionicons name="log-out-outline" size={16} color="#FFFFFF" />
-          <Text style={styles.headerBtnText}>Sortir</Text>
+          <Ionicons
+            name="chevron-down"
+            size={13}
+            color="#93C5FD"
+            style={{ marginLeft: 4 }}
+          />
         </Pressable>
       </LinearGradient>
 
@@ -279,173 +333,344 @@ export default function MainScreen({ atelier, onAtelierUpdated, onLogout }) {
       </View>
 
       {/* =====================================================================
-          MODAL : MODIFIER LA FICHE DU PROPRIÉTAIRE / ATELIER
+          MODAL ATELIER : INFOS DU RÉPARATEUR + MODIFICATION (AVEC MOT DE PASSE)
+                          + PETIT COIN DE DÉCONNEXION
          ===================================================================== */}
       <Modal
-        visible={editOwnerOpen}
+        visible={atelierModalOpen}
         transparent
-        animationType="slide"
-        onRequestClose={() => setEditOwnerOpen(false)}
+        animationType="fade"
+        onRequestClose={() => setAtelierModalOpen(false)}
       >
         <KeyboardAvoidingView
           style={styles.modalBackdrop}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <View style={styles.ownerSheet}>
-            <View style={styles.ownerHeader}>
-              <View style={styles.ownerHeaderLeft}>
-                <View style={styles.ownerBadge}>
-                  <Ionicons name="storefront" size={18} color={colors.accent} />
-                </View>
-                <View>
-                  <Text style={styles.ownerTitle}>Modifier mon atelier</Text>
-                  <Text style={styles.ownerSub}>
-                    Fiche du propriétaire (affichée dans les messages RAPELO)
-                  </Text>
-                </View>
+            {/* Bandeau supérieur de l'atelier avec petit coin de déconnexion */}
+            <LinearGradient
+              colors={['#0F172A', '#1E3A8A']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.ownerHero}
+            >
+              <View style={styles.ownerHeroLogoWrap}>
+                <Image
+                  source={require('../../assets/logo.jpg')}
+                  style={styles.brandLogo}
+                  resizeMode="contain"
+                />
               </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.ownerHeroTag}>ESPACE ATELIER · RAPELO</Text>
+                <Text style={styles.ownerHeroTitle} numberOfLines={1}>
+                  {atelier.atelierNom}
+                </Text>
+              </View>
+
+              {/* Petit coin de déconnexion en haut à droite */}
               <Pressable
-                onPress={() => setEditOwnerOpen(false)}
-                style={styles.ownerCloseBtn}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                  setConfirmLogout(true);
+                }}
+                style={({ pressed }) => [
+                  styles.logoutCornerBtn,
+                  pressed && { opacity: 0.8 },
+                ]}
               >
-                <Ionicons name="close" size={20} color={colors.text} />
+                <Ionicons name="power" size={14} color="#FCA5A5" />
+                <Text style={styles.logoutCornerText}>Déconnexion</Text>
               </Pressable>
-            </View>
+
+              <Pressable
+                onPress={() => setAtelierModalOpen(false)}
+                style={styles.ownerHeroClose}
+              >
+                <Ionicons name="close" size={19} color="#FFFFFF" />
+              </Pressable>
+            </LinearGradient>
 
             <ScrollView
               contentContainerStyle={styles.ownerScroll}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             >
-              <Field
-                label="Nom de l'atelier / Propriétaire"
-                icon="storefront-outline"
-                placeholder="Ex : Chez H et M Électronique"
-                value={ownerForm.atelierNom}
-                onChangeText={(v) =>
-                  setOwnerForm((f) => ({ ...f, atelierNom: v }))
-                }
-              />
-
-              <Field
-                label="Adresse / Quartier / Localisation"
-                icon="location-outline"
-                placeholder="Ex : Lakota, près du marché"
-                value={ownerForm.localisation}
-                onChangeText={(v) =>
-                  setOwnerForm((f) => ({ ...f, localisation: v }))
-                }
-              />
-
-              <Field
-                label="Numéro de téléphone (Infoline)"
-                icon="call-outline"
-                placeholder="Ex : 07 07 07 07 07"
-                keyboardType="phone-pad"
-                value={ownerForm.phone}
-                onChangeText={(v) => setOwnerForm((f) => ({ ...f, phone: v }))}
-              />
-
-              <Text style={styles.sectionLabel}>INDICATIF PAYS DE L'ATELIER</Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingBottom: 12 }}
-              >
-                {COUNTRY_DIAL_CODES.map((c) => {
-                  const active = ownerForm.indicatif === c.code;
-                  return (
+              {/* Confirmation de déconnexion si activée */}
+              {confirmLogout ? (
+                <View style={styles.logoutConfirmBox}>
+                  <View style={styles.logoutIconCircle}>
+                    <Ionicons name="log-out-outline" size={26} color={colors.danger} />
+                  </View>
+                  <Text style={styles.logoutModalTitle}>
+                    Se déconnecter de l'atelier ?
+                  </Text>
+                  <Text style={styles.logoutModalText}>
+                    Tu devras remettre ton numéro et ton mot de passe pour rouvrir la session.
+                  </Text>
+                  <View style={{ flexDirection: 'row', width: '100%', marginTop: 14 }}>
                     <Pressable
-                      key={c.code}
-                      onPress={() =>
-                        setOwnerForm((f) => ({ ...f, indicatif: c.code }))
-                      }
-                      style={[styles.dialChip, active && styles.dialChipActive]}
+                      onPress={() => setConfirmLogout(false)}
+                      style={[styles.logoutModalBtn, styles.logoutModalCancel]}
                     >
-                      <Text style={styles.dialFlag}>{c.flag}</Text>
-                      <Text style={[styles.dialText, active && styles.dialTextActive]}>
-                        +{c.code}
+                      <Text style={styles.logoutModalCancelText}>Annuler</Text>
+                    </Pressable>
+                    <View style={{ width: 10 }} />
+                    <Pressable
+                      onPress={() => {
+                        setAtelierModalOpen(false);
+                        onLogout?.();
+                      }}
+                      style={[styles.logoutModalBtn, styles.logoutModalConfirm]}
+                    >
+                      <Text style={styles.logoutModalConfirmText}>
+                        Oui, me déconnecter
                       </Text>
                     </Pressable>
-                  );
-                })}
-              </ScrollView>
+                  </View>
+                </View>
+              ) : null}
 
-              <Field
-                label="Nouveau mot de passe (optionnel)"
-                icon="lock-closed-outline"
-                placeholder="Laisse vide pour garder ton mot de passe actuel"
-                secureTextEntry
-                value={ownerForm.newPassword}
-                onChangeText={(v) =>
-                  setOwnerForm((f) => ({ ...f, newPassword: v }))
-                }
-              />
+              {/* ÉTAPE 1 : AFFICHAGE DES INFORMATIONS DU RÉPARATEUR */}
+              {atelierStep === 'info' ? (
+                <>
+                  <Text style={styles.sectionLabel}>
+                    COORDONNÉES ACTUELLES DU RÉPARATEUR
+                  </Text>
+                  <View style={styles.infoCard}>
+                    <OwnerInfoRow
+                      icon="storefront-outline"
+                      label="Nom de l'atelier"
+                      value={atelier.atelierNom}
+                    />
+                    <OwnerInfoRow
+                      icon="location-outline"
+                      label="Localisation"
+                      value={atelier.localisation}
+                    />
+                    <OwnerInfoRow
+                      icon="call-outline"
+                      label="Numéro Infoline"
+                      value={atelier.phone}
+                    />
+                    <OwnerInfoRow
+                      icon="globe-outline"
+                      label="Indicatif WhatsApp"
+                      value={`${countryInfo ? `${countryInfo.flag} ` : ''}+${
+                        digitsOnly(atelier.indicatif) || '225'
+                      }`}
+                      last
+                    />
+                  </View>
 
-              <View style={styles.ownerFooterRow}>
-                <Button
-                  title="Annuler"
-                  variant="outline"
-                  onPress={() => setEditOwnerOpen(false)}
-                  disabled={savingOwner}
-                />
-                <View style={{ width: 10 }} />
-                <Button
-                  title="Enregistrer"
-                  icon="checkmark-circle"
-                  variant="primary"
-                  loading={savingOwner}
-                  onPress={handleSaveOwner}
-                />
-              </View>
+                  <View style={styles.securityNotice}>
+                    <Ionicons name="lock-closed" size={16} color={colors.accent} />
+                    <Text style={styles.securityNoticeText}>
+                      La modification des coordonnées de l'atelier est protégée par ton mot de passe.
+                    </Text>
+                  </View>
+
+                  <View style={{ flexDirection: 'row', marginTop: 6 }}>
+                    <Button
+                      title="Modifier mes coordonnées"
+                      subtitle="Mot de passe requis"
+                      icon="key-outline"
+                      variant="primary"
+                      onPress={() => {
+                        setPasswordError('');
+                        setCurrentPassword('');
+                        setAtelierStep('unlock');
+                      }}
+                    />
+                  </View>
+
+                  {/* Petit coin de déconnexion en bas également */}
+                  <View style={styles.bottomLogoutWrap}>
+                    <Pressable
+                      onPress={() => setConfirmLogout(true)}
+                      style={styles.bottomLogoutBtn}
+                    >
+                      <Ionicons name="log-out-outline" size={17} color={colors.danger} />
+                      <Text style={styles.bottomLogoutText}>
+                        Se déconnecter de la session
+                      </Text>
+                    </Pressable>
+                  </View>
+                </>
+              ) : null}
+
+              {/* ÉTAPE 2 : VÉRIFICATION OBLIGATOIRE DU MOT DE PASSE */}
+              {atelierStep === 'unlock' ? (
+                <View style={styles.unlockBox}>
+                  <View style={styles.unlockIconCircle}>
+                    <Ionicons name="lock-closed" size={28} color={colors.accent} />
+                  </View>
+                  <Text style={styles.unlockTitle}>
+                    Vérification du mot de passe
+                  </Text>
+                  <Text style={styles.unlockSub}>
+                    Entre le mot de passe actuel de{' '}
+                    <Text style={{ fontWeight: '800', color: colors.text }}>
+                      {atelier.atelierNom}
+                    </Text>{' '}
+                    pour débloquer la modification des coordonnées.
+                  </Text>
+
+                  <View style={{ width: '100%', marginTop: 14 }}>
+                    <Field
+                      label="Mot de passe actuel (obligatoire)"
+                      icon="lock-closed-outline"
+                      placeholder="Tape ton mot de passe actuel..."
+                      secureTextEntry
+                      value={currentPassword}
+                      onChangeText={(v) => {
+                        setCurrentPassword(v);
+                        if (passwordError) setPasswordError('');
+                      }}
+                    />
+                  </View>
+
+                  {passwordError ? (
+                    <View style={styles.errorBanner}>
+                      <Ionicons name="alert-circle" size={18} color={colors.danger} />
+                      <Text style={styles.errorBannerText}>{passwordError}</Text>
+                    </View>
+                  ) : null}
+
+                  <View style={styles.ownerFooterRow}>
+                    <Button
+                      title="Retour"
+                      variant="outline"
+                      onPress={() => {
+                        setPasswordError('');
+                        setAtelierStep('info');
+                      }}
+                      disabled={verifyingPwd}
+                    />
+                    <View style={{ width: 10 }} />
+                    <Button
+                      title="Déverrouiller"
+                      icon="lock-open-outline"
+                      variant="primary"
+                      loading={verifyingPwd}
+                      onPress={handleVerifyPassword}
+                    />
+                  </View>
+                </View>
+              ) : null}
+
+              {/* ÉTAPE 3 : FORMULAIRE DE MODIFICATION DÉVERROUILLÉ */}
+              {atelierStep === 'edit' ? (
+                <>
+                  <View style={styles.unlockedBanner}>
+                    <Ionicons name="checkmark-circle" size={17} color={colors.success} />
+                    <Text style={styles.unlockedBannerText}>
+                      Mot de passe vérifié — tu peux modifier tes coordonnées.
+                    </Text>
+                  </View>
+
+                  <Field
+                    label="Nom de l'atelier / Propriétaire"
+                    icon="storefront-outline"
+                    placeholder="Ex : Chez H et M Électronique"
+                    value={ownerForm.atelierNom}
+                    onChangeText={(v) =>
+                      setOwnerForm((f) => ({ ...f, atelierNom: v }))
+                    }
+                  />
+
+                  <Field
+                    label="Adresse / Quartier / Localisation"
+                    icon="location-outline"
+                    placeholder="Ex : Lakota, près du marché"
+                    value={ownerForm.localisation}
+                    onChangeText={(v) =>
+                      setOwnerForm((f) => ({ ...f, localisation: v }))
+                    }
+                  />
+
+                  <Field
+                    label="Numéro de téléphone (Infoline)"
+                    icon="call-outline"
+                    placeholder="Ex : 07 07 07 07 07"
+                    keyboardType="phone-pad"
+                    value={ownerForm.phone}
+                    onChangeText={(v) => setOwnerForm((f) => ({ ...f, phone: v }))}
+                  />
+
+                  <Text style={styles.sectionLabel}>INDICATIF PAYS DE L'ATELIER</Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ paddingBottom: 12 }}
+                  >
+                    {COUNTRY_DIAL_CODES.map((c) => {
+                      const active = ownerForm.indicatif === c.code;
+                      return (
+                        <Pressable
+                          key={c.code}
+                          onPress={() =>
+                            setOwnerForm((f) => ({ ...f, indicatif: c.code }))
+                          }
+                          style={[styles.dialChip, active && styles.dialChipActive]}
+                        >
+                          <Text style={styles.dialFlag}>{c.flag}</Text>
+                          <Text style={[styles.dialText, active && styles.dialTextActive]}>
+                            +{c.code}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+
+                  <Field
+                    label="Nouveau mot de passe (optionnel)"
+                    icon="lock-closed-outline"
+                    placeholder="Laisse vide pour garder ton mot de passe actuel"
+                    secureTextEntry
+                    value={ownerForm.newPassword}
+                    onChangeText={(v) =>
+                      setOwnerForm((f) => ({ ...f, newPassword: v }))
+                    }
+                  />
+
+                  <View style={styles.ownerFooterRow}>
+                    <Button
+                      title="Annuler"
+                      variant="outline"
+                      onPress={() => setAtelierStep('info')}
+                      disabled={savingOwner}
+                    />
+                    <View style={{ width: 10 }} />
+                    <Button
+                      title="Enregistrer"
+                      icon="checkmark-circle"
+                      variant="primary"
+                      loading={savingOwner}
+                      onPress={handleSaveOwner}
+                    />
+                  </View>
+                </>
+              ) : null}
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>
-
-      {/* =====================================================================
-          MODAL : CONFIRMATION DE DÉCONNEXION
-         ===================================================================== */}
-      <Modal
-        visible={logoutModalOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setLogoutModalOpen(false)}
-      >
-        <Pressable
-          style={styles.modalBackdrop}
-          onPress={() => setLogoutModalOpen(false)}
-        >
-          <Pressable style={styles.logoutCard} onPress={(e) => e.stopPropagation()}>
-            <View style={styles.logoutIconCircle}>
-              <Ionicons name="log-out-outline" size={28} color={colors.danger} />
-            </View>
-            <Text style={styles.logoutModalTitle}>Fermer la session ?</Text>
-            <Text style={styles.logoutModalText}>
-              Tu pourras te reconnecter à tout moment avec ton numéro et ton mot de passe.
-            </Text>
-            <View style={{ flexDirection: 'row', width: '100%', marginTop: 16 }}>
-              <Pressable
-                onPress={() => setLogoutModalOpen(false)}
-                style={[styles.logoutModalBtn, styles.logoutModalCancel]}
-              >
-                <Text style={styles.logoutModalCancelText}>Annuler</Text>
-              </Pressable>
-              <View style={{ width: 10 }} />
-              <Pressable
-                onPress={() => {
-                  setLogoutModalOpen(false);
-                  onLogout?.();
-                }}
-                style={[styles.logoutModalBtn, styles.logoutModalConfirm]}
-              >
-                <Text style={styles.logoutModalConfirmText}>Se déconnecter</Text>
-              </Pressable>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
     </SafeAreaView>
+  );
+}
+
+function OwnerInfoRow({ icon, label, value, last }) {
+  return (
+    <View style={[styles.infoRow, !last && styles.infoRowBorder]}>
+      <View style={styles.infoRowLeft}>
+        <View style={styles.infoIconBox}>
+          <Ionicons name={icon} size={16} color={colors.accent} />
+        </View>
+        <Text style={styles.infoLabel}>{label}</Text>
+      </View>
+      <Text style={styles.infoValue}>{value}</Text>
+    </View>
   );
 }
 
@@ -515,10 +740,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.24)',
     borderRadius: radius.sm,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
-  headerBtnText: { color: '#fff', fontSize: 12, fontWeight: '700', marginLeft: 4 },
+  headerBtnText: { color: '#fff', fontSize: 13, fontWeight: '800', marginLeft: 5 },
   demo: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -558,7 +783,7 @@ const styles = StyleSheet.create({
 
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.72)',
+    backgroundColor: 'rgba(15, 23, 42, 0.74)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
@@ -566,57 +791,67 @@ const styles = StyleSheet.create({
   ownerSheet: {
     width: '100%',
     maxWidth: 480,
-    maxHeight: '90%',
+    maxHeight: '92%',
     backgroundColor: '#FFFFFF',
     borderRadius: radius.xl,
     overflow: 'hidden',
     ...shadow,
   },
-  ownerHeader: {
+  ownerHero: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.surface,
+    paddingHorizontal: 16,
+    paddingVertical: 15,
   },
-  ownerHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  ownerBadge: {
-    width: 38,
-    height: 38,
+  ownerHeroLogoWrap: {
+    width: 44,
+    height: 44,
     borderRadius: 12,
-    backgroundColor: colors.accentSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    padding: 3,
     marginRight: 10,
+    overflow: 'hidden',
   },
-  ownerTitle: {
-    fontSize: 16,
+  ownerHeroTag: {
+    fontSize: 10,
     fontWeight: '900',
-    color: colors.text,
+    color: '#93C5FD',
+    letterSpacing: 0.7,
   },
-  ownerSub: {
-    fontSize: 12,
-    color: colors.muted,
+  ownerHeroTitle: {
+    fontSize: 17,
+    fontWeight: '900',
+    color: '#FFFFFF',
     marginTop: 1,
   },
-  ownerCloseBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#E2E8F0',
+  logoutCornerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(252, 165, 165, 0.45)',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginRight: 8,
+  },
+  logoutCornerText: {
+    color: '#FECACA',
+    fontSize: 11,
+    fontWeight: '800',
+    marginLeft: 4,
+  },
+  ownerHeroClose: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.16)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   ownerScroll: {
     padding: 18,
-    paddingBottom: 26,
+    paddingBottom: 24,
   },
   sectionLabel: {
     fontSize: 11,
@@ -624,6 +859,151 @@ const styles = StyleSheet.create({
     color: colors.muted,
     letterSpacing: 0.6,
     marginBottom: 8,
+  },
+  infoCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    marginBottom: 14,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 11,
+  },
+  infoRowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  infoRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  infoIconBox: {
+    width: 30,
+    height: 30,
+    borderRadius: 9,
+    backgroundColor: colors.accentSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 9,
+  },
+  infoLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.muted,
+  },
+  infoValue: {
+    flex: 1,
+    textAlign: 'right',
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.text,
+    marginLeft: 10,
+  },
+  securityNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.accentSoft,
+    borderRadius: radius.md,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 10,
+  },
+  securityNoticeText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.accentDark,
+    marginLeft: 8,
+    lineHeight: 17,
+  },
+  bottomLogoutWrap: {
+    marginTop: 16,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    alignItems: 'center',
+  },
+  bottomLogoutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: colors.dangerSoft,
+  },
+  bottomLogoutText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: colors.danger,
+    marginLeft: 6,
+  },
+  unlockBox: {
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  unlockIconCircle: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: colors.accentSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  unlockTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: colors.text,
+  },
+  unlockSub: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 5,
+    lineHeight: 19,
+  },
+  errorBanner: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.dangerSoft,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: radius.md,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 10,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.danger,
+    marginLeft: 7,
+  },
+  unlockedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.badgeGreen,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    borderRadius: radius.md,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    marginBottom: 14,
+  },
+  unlockedBannerText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#15803D',
+    marginLeft: 7,
   },
   dialChip: {
     flexDirection: 'row',
@@ -645,51 +1025,52 @@ const styles = StyleSheet.create({
   dialTextActive: { color: colors.whatsappDark },
   ownerFooterRow: {
     flexDirection: 'row',
+    width: '100%',
     marginTop: 8,
   },
-  logoutCard: {
-    width: '100%',
-    maxWidth: 380,
-    backgroundColor: '#FFFFFF',
-    borderRadius: radius.xl,
-    padding: 22,
+  logoutConfirmBox: {
+    backgroundColor: '#FFF1F2',
+    borderWidth: 1.5,
+    borderColor: '#FECDD3',
+    borderRadius: radius.lg,
+    padding: 16,
     alignItems: 'center',
-    ...shadow,
+    marginBottom: 16,
   },
   logoutIconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.dangerSoft,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#FFE4E6',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   logoutModalTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '900',
     color: colors.text,
   },
   logoutModalText: {
-    fontSize: 13,
+    fontSize: 12,
     color: colors.textSecondary,
     textAlign: 'center',
-    marginTop: 6,
-    lineHeight: 19,
+    marginTop: 4,
+    lineHeight: 18,
   },
   logoutModalBtn: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: 11,
     borderRadius: radius.md,
     alignItems: 'center',
   },
   logoutModalCancel: {
-    backgroundColor: colors.surface,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1.5,
     borderColor: colors.border,
   },
   logoutModalCancelText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '800',
     color: colors.textSecondary,
   },
@@ -697,7 +1078,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.danger,
   },
   logoutModalConfirmText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '800',
     color: '#FFFFFF',
   },
