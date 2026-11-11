@@ -233,22 +233,15 @@ export default function MainScreen({ atelier, onAtelierUpdated, onLogout }) {
         end={{ x: 1, y: 1 }}
         style={styles.header}
       >
-        {/* Appuyer sur le logo ou le nom ouvre les infos de l'atelier */}
-        <Pressable
-          onPress={openAtelierModal}
-          style={({ pressed }) => [
-            styles.brandBadge,
-            pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] },
-          ]}
-        >
+        <View style={styles.brandBadge}>
           <Image
             source={require('../../assets/logo.jpg')}
             style={styles.brandLogo}
             resizeMode="contain"
           />
-        </Pressable>
+        </View>
 
-        <Pressable onPress={openAtelierModal} style={{ flex: 1 }}>
+        <View style={{ flex: 1 }}>
           <Text style={styles.atelier} numberOfLines={1}>
             {atelier.atelierNom}
           </Text>
@@ -258,7 +251,7 @@ export default function MainScreen({ atelier, onAtelierUpdated, onLogout }) {
               {atelier.localisation} · {atelier.phone}
             </Text>
           </View>
-        </Pressable>
+        </View>
 
         {/* Seul bouton en haut à droite : Atelier (contient infos, modification protégée & déconnexion) */}
         <Pressable
@@ -482,19 +475,6 @@ export default function MainScreen({ atelier, onAtelierUpdated, onLogout }) {
                         setAtelierStep('unlock');
                       }}
                     />
-                  </View>
-
-                  {/* Petit coin de déconnexion en bas également */}
-                  <View style={styles.bottomLogoutWrap}>
-                    <Pressable
-                      onPress={() => setConfirmLogout(true)}
-                      style={styles.bottomLogoutBtn}
-                    >
-                      <Ionicons name="log-out-outline" size={17} color={colors.danger} />
-                      <Text style={styles.bottomLogoutText}>
-                        Se déconnecter de la session
-                      </Text>
-                    </Pressable>
                   </View>
                 </>
               ) : null}
