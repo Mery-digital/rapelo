@@ -1,10 +1,11 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
   ScrollView,
   Pressable,
   Animated,
+  Easing,
   StyleSheet,
   Alert,
 } from 'react-native';
@@ -66,6 +67,31 @@ export default function NewRepairScreen({ atelier, onCreated }) {
   const [form, setForm] = useState(makeEmpty);
   const [sending, setSending] = useState(null); // 'whatsapp' | 'sms' | null
   const scrollY = useRef(new Animated.Value(0)).current;
+  const toolAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(toolAnim, {
+          toValue: 1,
+          duration: 1500,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(toolAnim, {
+          toValue: 0,
+          duration: 1500,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, [toolAnim]);
+
+  const toolRotate = toolAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['-14deg', '14deg'],
+  });
 
   const set = (key) => (value) => setForm((f) => ({ ...f, [key]: value }));
 
@@ -218,19 +244,44 @@ export default function NewRepairScreen({ atelier, onCreated }) {
         }}
       >
         <LinearGradient
-          colors={['#1E293B', '#0F172A']}
+          colors={['#0B1120', '#1E3A8A', '#1D4ED8']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.heroBanner}
         >
-          <View style={styles.heroIconWrap}>
-            <Ionicons name="construct" size={24} color="#60A5FA" />
+          <View style={styles.heroTopRow}>
+            <Animated.View
+              style={[
+                styles.heroIconWrap,
+                { transform: [{ rotate: toolRotate }] },
+              ]}
+            >
+              <Ionicons name="construct" size={24} color="#38BDF8" />
+            </Animated.View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.heroTag}>RÉCEPTION & DIAGNOSTIC D'ATELIER</Text>
+              <Text style={styles.heroTitle}>Nouveau dépôt d'appareil</Text>
+              <Text style={styles.heroSubtitle}>
+                Téléphone, PC, TV, console, électroménager… prends la photo et envoie le reçu.
+              </Text>
+            </View>
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.heroTitle}>Nouveau dépôt d'appareil</Text>
-            <Text style={styles.heroSubtitle}>
-              Téléphone, PC, TV, console, électroménager… prends la photo et envoie le reçu.
-            </Text>
+
+          <View style={styles.heroStepsRow}>
+            <View style={styles.heroStepPill}>
+              <Ionicons name="camera-outline" size={12} color="#38BDF8" />
+              <Text style={styles.heroStepPillText}>1. Photo</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={12} color="#93C5FD" />
+            <View style={styles.heroStepPill}>
+              <Ionicons name="hardware-chip-outline" size={12} color="#4ADE80" />
+              <Text style={styles.heroStepPillText}>2. Diagnostic</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={12} color="#93C5FD" />
+            <View style={styles.heroStepPill}>
+              <Ionicons name="paper-plane-outline" size={12} color="#FBBF24" />
+              <Text style={styles.heroStepPillText}>3. Reçu client</Text>
+            </View>
           </View>
         </LinearGradient>
       </Animated.View>
@@ -473,24 +524,57 @@ function QuickChip({ label, onPress }) {
 const styles = StyleSheet.create({
   scroll: { padding: 16, paddingBottom: 48 },
   heroBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
     borderRadius: radius.lg,
     padding: 16,
     marginBottom: 14,
     ...shadow,
   },
+  heroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   heroIconWrap: {
     width: 48,
     height: 48,
     borderRadius: 15,
-    backgroundColor: 'rgba(96, 165, 250, 0.16)',
+    backgroundColor: 'rgba(56, 189, 248, 0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.35)',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 13,
   },
+  heroTag: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#93C5FD',
+    letterSpacing: 0.7,
+    marginBottom: 2,
+  },
   heroTitle: { fontSize: 18, fontWeight: '800', color: '#FFFFFF' },
   heroSubtitle: { fontSize: 12, color: '#CBD5E1', marginTop: 3, lineHeight: 17 },
+  heroStepsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.14)',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    marginTop: 12,
+  },
+  heroStepPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  heroStepPillText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#E2E8F0',
+    marginLeft: 5,
+  },
   card: {
     backgroundColor: colors.card,
     borderRadius: radius.lg,

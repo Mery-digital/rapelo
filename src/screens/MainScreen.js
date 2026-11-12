@@ -51,6 +51,45 @@ export default function MainScreen({ atelier, onAtelierUpdated, onLogout }) {
 
   const tabFade = useRef(new Animated.Value(1)).current;
   const tabSlide = useRef(new Animated.Value(0)).current;
+  const livePulse = useRef(new Animated.Value(1)).current;
+  const toolSwing = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(livePulse, {
+          toValue: 1.3,
+          duration: 850,
+          useNativeDriver: true,
+        }),
+        Animated.timing(livePulse, {
+          toValue: 1,
+          duration: 850,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(toolSwing, {
+          toValue: 1,
+          duration: 1800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(toolSwing, {
+          toValue: 0,
+          duration: 1800,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, [livePulse, toolSwing]);
+
+  const toolRotate = toolSwing.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['-10deg', '10deg'],
+  });
 
   const switchTab = (nextTab) => {
     if (nextTab === tab) return;
@@ -228,7 +267,7 @@ export default function MainScreen({ atelier, onAtelierUpdated, onLogout }) {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <LinearGradient
-        colors={['#0F172A', '#1E3A8A']}
+        colors={['#0B1120', '#1E3A8A', '#1D4ED8']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.header}
@@ -239,9 +278,23 @@ export default function MainScreen({ atelier, onAtelierUpdated, onLogout }) {
             style={styles.brandLogo}
             resizeMode="contain"
           />
+          <Animated.View
+            style={[
+              styles.toolCornerBadge,
+              { transform: [{ rotate: toolRotate }] },
+            ]}
+          >
+            <Ionicons name="construct" size={10} color="#FFFFFF" />
+          </Animated.View>
         </View>
 
         <View style={{ flex: 1 }}>
+          <View style={styles.liveStatusRow}>
+            <Animated.View
+              style={[styles.liveDot, { transform: [{ scale: livePulse }] }]}
+            />
+            <Text style={styles.liveStatusLabel}>ATELIER DE RÉPARATION</Text>
+          </View>
           <Text style={styles.atelier} numberOfLines={1}>
             {atelier.atelierNom}
           </Text>
@@ -258,7 +311,7 @@ export default function MainScreen({ atelier, onAtelierUpdated, onLogout }) {
           onPress={openAtelierModal}
           style={({ pressed }) => [styles.headerBtn, pressed && { opacity: 0.75 }]}
         >
-          <Ionicons name="storefront-outline" size={16} color="#FFFFFF" />
+          <Ionicons name="construct-outline" size={16} color="#93C5FD" />
           <Text style={styles.headerBtnText}>Atelier</Text>
           <Ionicons
             name="chevron-down"
@@ -281,8 +334,8 @@ export default function MainScreen({ atelier, onAtelierUpdated, onLogout }) {
 
         <View style={styles.tabs}>
           <Tab
-            icon="layers-outline"
-            label={`Appareils (${activeCount})`}
+            icon="construct-outline"
+            label={`Banc d'atelier (${activeCount})`}
             active={tab === 'list'}
             onPress={() => switchTab('list')}
           />
@@ -696,19 +749,50 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   brandBadge: {
-    width: 46,
-    height: 46,
+    width: 48,
+    height: 48,
     borderRadius: 14,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    marginRight: 11,
     padding: 3,
-    overflow: 'hidden',
+  },
+  toolCornerBadge: {
+    position: 'absolute',
+    right: -4,
+    bottom: -4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.accent,
+    borderWidth: 2,
+    borderColor: '#0F172A',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   brandLogo: {
     width: '100%',
     height: '100%',
+    borderRadius: 10,
+  },
+  liveStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 1,
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#4ADE80',
+    marginRight: 5,
+  },
+  liveStatusLabel: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#93C5FD',
+    letterSpacing: 0.7,
   },
   atelier: { color: '#fff', fontSize: 17, fontWeight: '800' },
   locRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },

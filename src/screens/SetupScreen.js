@@ -9,13 +9,23 @@ import {
   KeyboardAvoidingView,
   Pressable,
   Animated,
+  Easing,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import Field from '../components/Field';
 import Button from '../components/Button';
 import { colors, radius, shadow } from '../theme';
 import { saveAtelier, clearAtelier, hashPassword } from '../lib/storage';
 import { digitsOnly } from '../lib/messaging';
+
+const WORKSHOP_BADGES = [
+  { icon: 'construct', label: 'Soudure & Pièces', color: '#38BDF8' },
+  { icon: 'phone-portrait-outline', label: 'Écrans & Tactiles', color: '#4ADE80' },
+  { icon: 'hardware-chip-outline', label: 'Carte mère & IC', color: '#FBBF24' },
+  { icon: 'flash-outline', label: 'Charge & Batterie', color: '#F472B6' },
+];
 
 /**
  * mode = "setup" : first time, create the workshop
@@ -32,10 +42,13 @@ export default function SetupScreen({ mode, savedAtelier, onDone, onReset }) {
 
   const fade = useRef(new Animated.Value(0)).current;
   const slide = useRef(new Animated.Value(28)).current;
+  const floatAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const spinAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(fade, { toValue: 1, duration: 360, useNativeDriver: true }),
+      Animated.timing(fade, { toValue: 1, duration: 420, useNativeDriver: true }),
       Animated.spring(slide, {
         toValue: 0,
         useNativeDriver: true,
@@ -43,7 +56,69 @@ export default function SetupScreen({ mode, savedAtelier, onDone, onReset }) {
         bounciness: 7,
       }),
     ]).start();
-  }, [fade, slide]);
+
+    // Floating repair tools animation
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatAnim, {
+          toValue: 1,
+          duration: 2000,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(floatAnim, {
+          toValue: 0,
+          duration: 2000,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+
+    // Pulsing workshop status dot
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.25,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+
+    // Slow oscillating wrench/gear motion
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(spinAnim, {
+          toValue: 1,
+          duration: 2600,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(spinAnim, {
+          toValue: 0,
+          duration: 2600,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, [fade, slide, floatAnim, pulseAnim, spinAnim]);
+
+  const floatY = floatAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -6],
+  });
+
+  const toolRotate = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['-12deg', '12deg'],
+  });
 
   const handleSetup = async () => {
     if (!phone.trim() || !password || !atelierNom.trim() || !localisation.trim()) {
@@ -119,38 +194,117 @@ export default function SetupScreen({ mode, savedAtelier, onDone, onReset }) {
   return (
     <SafeAreaView style={styles.safe}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* VITRINE D'ATELIER ANIMÉE */}
           <Animated.View
-            style={[styles.brand, { opacity: fade, transform: [{ translateY: slide }] }]}
+            style={[
+              styles.heroShowcase,
+              { opacity: fade, transform: [{ translateY: slide }] },
+            ]}
           >
-            <View style={styles.logoCard}>
-              <Image
-                source={require('../../assets/logo.jpg')}
-                style={styles.logoImage}
-                resizeMode="contain"
-              />
-            </View>
-            <Text style={styles.tagline}>
-              Gestion moderne d'atelier électronique & réparation
-            </Text>
+            <LinearGradient
+              colors={['#0B1120', '#1E3A8A', '#1D4ED8']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.heroGradient}
+            >
+              {/* Bandeau supérieur statut atelier */}
+              <View style={styles.liveAtelierPill}>
+                <Animated.View
+                  style={[
+                    styles.liveDot,
+                    { transform: [{ scale: pulseAnim }] },
+                  ]}
+                />
+                <Text style={styles.liveAtelierText}>
+                  SYSTÈME PROFESSIONNEL POUR RÉPARATEURS
+                </Text>
+              </View>
+
+              {/* Logo central + outils flottants animés */}
+              <View style={styles.logoOrbitWrap}>
+                <Animated.View
+                  style={[
+                    styles.orbitBadge,
+                    styles.orbitLeft,
+                    { transform: [{ translateY: floatY }, { rotate: toolRotate }] },
+                  ]}
+                >
+                  <Ionicons name="construct" size={18} color="#38BDF8" />
+                </Animated.View>
+
+                <Animated.View
+                  style={[
+                    styles.logoCard,
+                    { transform: [{ translateY: floatY }] },
+                  ]}
+                >
+                  <Image
+                    source={require('../../assets/logo.jpg')}
+                    style={styles.logoImage}
+                    resizeMode="contain"
+                  />
+                </Animated.View>
+
+                <Animated.View
+                  style={[
+                    styles.orbitBadge,
+                    styles.orbitRight,
+                    { transform: [{ translateY: floatY }, { rotate: toolRotate }] },
+                  ]}
+                >
+                  <Ionicons name="hardware-chip" size={18} color="#4ADE80" />
+                </Animated.View>
+              </View>
+
+              <Text style={styles.tagline}>
+                Atelier de Réparation Téléphones, PC, TV & Électronique
+              </Text>
+
+              {/* Puces des spécialités de réparation */}
+              <View style={styles.specialtiesRow}>
+                {WORKSHOP_BADGES.map((b) => (
+                  <View key={b.label} style={styles.specialtyChip}>
+                    <Ionicons name={b.icon} size={12} color={b.color} />
+                    <Text style={styles.specialtyChipText}>{b.label}</Text>
+                  </View>
+                ))}
+              </View>
+            </LinearGradient>
           </Animated.View>
 
+          {/* CARTE DE CONNEXION / CONFIGURATION */}
           <Animated.View
             style={[styles.card, { opacity: fade, transform: [{ translateY: slide }] }]}
           >
-            {isLogin ? (
-              <>
-                <Text style={styles.title}>Bon retour 👋</Text>
-                <Text style={styles.subtitle}>{savedAtelier?.atelierNom}</Text>
-              </>
-            ) : (
-              <>
-                <Text style={styles.title}>Configure ton atelier</Text>
-                <Text style={styles.subtitle}>
-                  Ces infos s'ajoutent automatiquement aux messages WhatsApp et SMS des clients.
-                </Text>
-              </>
-            )}
+            <View style={styles.cardHeaderRow}>
+              <View style={styles.cardHeaderIcon}>
+                <Ionicons
+                  name={isLogin ? 'shield-checkmark' : 'construct'}
+                  size={20}
+                  color={colors.accent}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                {isLogin ? (
+                  <>
+                    <Text style={styles.title}>Bon retour à l'atelier</Text>
+                    <Text style={styles.subtitle}>{savedAtelier?.atelierNom}</Text>
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.title}>Configure ton atelier</Text>
+                    <Text style={styles.subtitle}>
+                      Ces coordonnées s'ajoutent automatiquement sur les reçus WhatsApp et SMS des clients.
+                    </Text>
+                  </>
+                )}
+              </View>
+            </View>
 
             <Field
               label="Numéro de téléphone (Infoline)"
@@ -161,7 +315,7 @@ export default function SetupScreen({ mode, savedAtelier, onDone, onReset }) {
               onChangeText={setPhone}
             />
             <Field
-              label="Mot de passe"
+              label="Mot de passe du réparateur"
               icon="lock-closed-outline"
               placeholder="Ton mot de passe"
               secureTextEntry
@@ -208,6 +362,7 @@ export default function SetupScreen({ mode, savedAtelier, onDone, onReset }) {
 
             {isLogin && (
               <Pressable onPress={handleReset} style={styles.link}>
+                <Ionicons name="refresh-circle-outline" size={16} color={colors.sms} />
                 <Text style={styles.linkText}>Changer d’atelier / Mot de passe oublié</Text>
               </Pressable>
             )}
@@ -220,33 +375,138 @@ export default function SetupScreen({ mode, savedAtelier, onDone, onReset }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
-  scroll: { padding: 20, paddingTop: 28, flexGrow: 1, justifyContent: 'center' },
-  brand: { alignItems: 'center', marginBottom: 22 },
+  scroll: { padding: 18, paddingTop: 20, flexGrow: 1, justifyContent: 'center' },
+  heroShowcase: {
+    marginBottom: 16,
+    borderRadius: radius.xl,
+    overflow: 'hidden',
+    ...shadow,
+  },
+  heroGradient: {
+    paddingHorizontal: 18,
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  liveAtelierPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    marginBottom: 14,
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#4ADE80',
+    marginRight: 7,
+  },
+  liveAtelierText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#E2E8F0',
+    letterSpacing: 0.7,
+  },
+  logoOrbitWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  orbitBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  orbitLeft: {
+    marginRight: 12,
+  },
+  orbitRight: {
+    marginLeft: 12,
+  },
   logoCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    paddingHorizontal: 22,
-    paddingVertical: 14,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderRadius: 22,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderWidth: 2,
+    borderColor: 'rgba(147, 197, 253, 0.5)',
     ...shadow,
   },
   logoImage: {
-    width: 190,
-    height: 120,
+    width: 175,
+    height: 104,
   },
-  tagline: { fontSize: 13, fontWeight: '700', color: colors.muted, marginTop: 4, textAlign: 'center' },
+  tagline: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#F8FAFC',
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  specialtiesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    marginTop: 12,
+    gap: 6,
+  },
+  specialtyChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    marginHorizontal: 2,
+    marginVertical: 2,
+  },
+  specialtyChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#E2E8F0',
+    marginLeft: 5,
+  },
   card: {
     backgroundColor: colors.card,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     padding: 20,
     borderWidth: 1,
     borderColor: '#E2E8F0',
     ...shadow,
   },
-  title: { fontSize: 22, fontWeight: '800', color: colors.text },
-  subtitle: { fontSize: 13, color: colors.muted, marginTop: 4, marginBottom: 18, lineHeight: 18 },
-  link: { alignItems: 'center', marginTop: 16 },
-  linkText: { color: colors.sms, fontSize: 13, fontWeight: '700' },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  cardHeaderIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: colors.accentSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  title: { fontSize: 20, fontWeight: '900', color: colors.text },
+  subtitle: { fontSize: 12, color: colors.muted, marginTop: 2, lineHeight: 17 },
+  link: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+  },
+  linkText: { color: colors.sms, fontSize: 13, fontWeight: '700', marginLeft: 5 },
 });

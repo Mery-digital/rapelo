@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Animated,
+  Easing,
   LayoutAnimation,
   Modal,
   ScrollView,
@@ -364,6 +365,9 @@ export default function RepairsListScreen({
         )}
         refreshControl={<RefreshControl refreshing={false} onRefresh={onRefresh} />}
       >
+        {/* Bandeau Atelier de Réparation Animé */}
+        <WorkshopLiveBanner stats={stats} />
+
         {/* Interactive Status Filter Pills */}
         <ScrollView
           horizontal
@@ -371,6 +375,7 @@ export default function RepairsListScreen({
           contentContainerStyle={styles.statsRow}
         >
           <StatPill
+            icon="layers-outline"
             label="En atelier"
             count={stats.actifs}
             active={filterStatus === 'all'}
@@ -378,13 +383,15 @@ export default function RepairsListScreen({
             onPress={() => handleFilterChange('all')}
           />
           <StatPill
-            label="En cours"
+            icon="construct-outline"
+            label="Sur le banc"
             count={stats.enCours}
             active={filterStatus === 'en_cours'}
             color={colors.accent}
             onPress={() => handleFilterChange('en_cours')}
           />
           <StatPill
+            icon="checkmark-done-circle-outline"
             label="Réparés (Prêts)"
             count={stats.prets}
             active={filterStatus === 'pret'}
@@ -392,6 +399,7 @@ export default function RepairsListScreen({
             onPress={() => handleFilterChange('pret')}
           />
           <StatPill
+            icon="close-circle-outline"
             label="Non réparés"
             count={stats.nonRepares}
             active={filterStatus === 'non_repare'}
@@ -399,6 +407,7 @@ export default function RepairsListScreen({
             onPress={() => handleFilterChange('non_repare')}
           />
           <StatPill
+            icon="bag-check-outline"
             label="Récupérés"
             count={stats.livres}
             active={filterStatus === 'livre'}
@@ -1108,7 +1117,107 @@ export default function RepairsListScreen({
   );
 }
 
-function StatPill({ label, count, active, color, onPress }) {
+function WorkshopLiveBanner({ stats }) {
+  const pulse = useRef(new Animated.Value(1)).current;
+  const toolRotateAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1.25,
+          duration: 850,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 850,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(toolRotateAnim, {
+          toValue: 1,
+          duration: 1400,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(toolRotateAnim, {
+          toValue: 0,
+          duration: 1400,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, [pulse, toolRotateAnim]);
+
+  const rotate = toolRotateAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['-15deg', '15deg'],
+  });
+
+  const totalHandled = stats.actifs + stats.livres;
+  const doneCount = stats.prets + stats.livres;
+  const progressPct =
+    totalHandled > 0 ? Math.min(100, Math.round((doneCount / totalHandled) * 100)) : 0;
+
+  return (
+    <LinearGradient
+      colors={['#0F172A', '#1E293B']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.workshopBanner}
+    >
+      <View style={styles.workshopBannerTop}>
+        <Animated.View
+          style={[
+            styles.workshopBannerIcon,
+            stats.enCours > 0 && { transform: [{ rotate }] },
+          ]}
+        >
+          <Ionicons name="construct" size={20} color="#38BDF8" />
+        </Animated.View>
+
+        <View style={{ flex: 1 }}>
+          <View style={styles.workshopLiveTitleRow}>
+            <Animated.View
+              style={[
+                styles.workshopLiveDot,
+                {
+                  backgroundColor: stats.enCours > 0 ? '#38BDF8' : '#4ADE80',
+                  transform: [{ scale: pulse }],
+                },
+              ]}
+            />
+            <Text style={styles.workshopLiveTag}>
+              {stats.enCours > 0
+                ? 'BANC DE RÉPARATION EN ACTIVITÉ'
+                : 'ATELIER OPÉRATIONNEL · BANC PRÊT'}
+            </Text>
+          </View>
+          <Text style={styles.workshopBannerSub}>
+            {stats.enCours} sur le banc · {stats.prets} prêt(s) à livrer · {stats.livres} remis
+          </Text>
+        </View>
+
+        <View style={styles.workshopPctBadge}>
+          <Ionicons name="hardware-chip-outline" size={12} color="#38BDF8" />
+          <Text style={styles.workshopPctText}>{progressPct}%</Text>
+        </View>
+      </View>
+
+      <View style={styles.workshopBarTrack}>
+        <View style={[styles.workshopBarFill, { width: `${progressPct}%` }]} />
+      </View>
+    </LinearGradient>
+  );
+}
+
+function StatPill({ icon, label, count, active, color, onPress }) {
   const scale = useRef(new Animated.Value(1)).current;
   const bounce = (to) =>
     Animated.spring(scale, {
@@ -1129,7 +1238,17 @@ function StatPill({ label, count, active, color, onPress }) {
           active && { backgroundColor: color, borderColor: color },
         ]}
       >
-        <Text style={[styles.statCount, active && { color: '#FFFFFF' }]}>{count}</Text>
+        <View style={styles.statTopRow}>
+          {icon ? (
+            <Ionicons
+              name={icon}
+              size={14}
+              color={active ? '#FFFFFF' : color}
+              style={{ marginRight: 5 }}
+            />
+          ) : null}
+          <Text style={[styles.statCount, active && { color: '#FFFFFF' }]}>{count}</Text>
+        </View>
         <Text
           style={[styles.statLabel, active && { color: 'rgba(255,255,255,0.92)' }]}
           numberOfLines={1}
@@ -1158,12 +1277,83 @@ const styles = StyleSheet.create({
   search: { flex: 1, fontSize: 15, fontWeight: '600', paddingVertical: 12, color: colors.text },
   clearBtn: { padding: 4 },
   scroll: { padding: 16, paddingBottom: 48 },
+  workshopBanner: {
+    borderRadius: radius.lg,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 12,
+    ...shadowSoft,
+  },
+  workshopBannerTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  workshopBannerIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: 'rgba(56, 189, 248, 0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 11,
+  },
+  workshopLiveTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  workshopLiveDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    marginRight: 6,
+  },
+  workshopLiveTag: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#93C5FD',
+    letterSpacing: 0.6,
+  },
+  workshopBannerSub: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#E2E8F0',
+    marginTop: 2,
+  },
+  workshopPctBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    marginLeft: 8,
+  },
+  workshopPctText: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    marginLeft: 4,
+  },
+  workshopBarTrack: {
+    height: 5,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 999,
+    marginTop: 10,
+    overflow: 'hidden',
+  },
+  workshopBarFill: {
+    height: '100%',
+    backgroundColor: '#38BDF8',
+    borderRadius: 999,
+  },
   statsRow: {
     flexDirection: 'row',
     paddingBottom: 14,
   },
   statPill: {
-    minWidth: 92,
+    minWidth: 96,
     backgroundColor: colors.card,
     borderRadius: radius.md,
     paddingVertical: 9,
@@ -1172,6 +1362,10 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.border,
     ...shadowSoft,
+  },
+  statTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   statCount: { fontSize: 17, fontWeight: '900', color: colors.text },
   statLabel: { fontSize: 11, fontWeight: '700', color: colors.muted, marginTop: 2 },

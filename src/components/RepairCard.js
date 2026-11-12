@@ -7,8 +7,8 @@ import {
   StyleSheet,
   Pressable,
   Animated,
+  Easing,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Button from './Button';
@@ -81,32 +81,44 @@ function getStatusMeta(statut) {
   if (statut === 'pret') {
     return {
       label: 'Réparé · Prêt à récupérer',
+      shortStage: 'Tests OK · Prêt',
       icon: 'checkmark-circle',
       fg: colors.success,
       bg: colors.badgeGreen,
+      accent: '#16A34A',
+      step: 3,
     };
   }
   if (statut === 'non_repare') {
     return {
       label: 'Non réparé · À récupérer',
+      shortStage: 'Non réparé',
       icon: 'close-circle',
       fg: colors.dangerDark || colors.danger,
       bg: colors.badgeRed || colors.dangerSoft,
+      accent: '#EF4444',
+      step: 3,
     };
   }
   if (statut === 'livre') {
     return {
       label: 'Récupéré par le client',
+      shortStage: 'Remis au client',
       icon: 'bag-check-outline',
       fg: colors.textSecondary,
       bg: '#E2E8F0',
+      accent: '#64748B',
+      step: 3,
     };
   }
   return {
-    label: 'En cours de réparation',
-    icon: 'time-outline',
+    label: 'Sur le banc de réparation',
+    shortStage: 'En cours',
+    icon: 'construct',
     fg: colors.sms,
     bg: colors.badgeBlue,
+    accent: '#2563EB',
+    step: 2,
   };
 }
 
@@ -115,8 +127,6 @@ export default function RepairCard({
   index = 0,
   onWhatsApp,
   onSms,
-  onUnrepaired,
-  onReminder,
   onDelivered,
   onEdit,
   onDelete,
@@ -124,8 +134,7 @@ export default function RepairCard({
 }) {
   const statusMeta = getStatusMeta(fiche.statut);
   const isDelivered = fiche.statut === 'livre';
-  const isWaitingPickup =
-    fiche.statut === 'pret' || fiche.statut === 'non_repare';
+  const isInProgress = fiche.statut === 'en_cours' || !fiche.statut;
   const waitDays = daysSince(fiche.pret_le || fiche.created_at);
   const { total, paid, reste } = computeBalance(
     fiche.prix_estime,
@@ -138,6 +147,10 @@ export default function RepairCard({
   const slide = useRef(new Animated.Value(26)).current;
   const cardScale = useRef(new Animated.Value(1)).current;
   const doneScale = useRef(new Animated.Value(1)).current;
+
+  // Live workshop animations (pulsing LED + animated tool when repairing)
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const toolAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const delay = Math.min(index, 6) * 60;
@@ -158,6 +171,56 @@ export default function RepairCard({
     ]).start();
   }, [fade, slide, index]);
 
+  useEffect(() => {
+    if (isDelivered) return;
+    const pulseLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.35,
+          duration: 850,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 850,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    pulseLoop.start();
+
+    let toolLoop;
+    if (isInProgress) {
+      toolLoop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(toolAnim, {
+            toValue: 1,
+            duration: 900,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(toolAnim, {
+            toValue: 0,
+            duration: 900,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      toolLoop.start();
+    }
+
+    return () => {
+      pulseLoop.stop();
+      toolLoop?.stop();
+    };
+  }, [isDelivered, isInProgress, pulseAnim, toolAnim]);
+
+  const toolRotate = toolAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['-14deg', '14deg'],
+  });
+
   const bounce = (anim, toValue) =>
     Animated.spring(anim, {
       toValue,
@@ -176,242 +239,299 @@ export default function RepairCard({
         },
       ]}
     >
-      {/* Top row: thumbnail + customer + status badge + Edit/Delete buttons */}
-      <View style={styles.headerRow}>
-        {fiche.photo_url ? (
-          <Pressable
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-              setViewerOpen(true);
-            }}
-            onPressIn={() => bounce(cardScale, 0.97)}
-            onPressOut={() => bounce(cardScale, 1)}
-            style={styles.thumbWrap}
-          >
-            <Image source={{ uri: fiche.photo_url }} style={styles.thumb} />
-            <View style={styles.zoomBadge}>
-              <Ionicons name="expand" size={11} color="#FFFFFF" />
-            </View>
-          </Pressable>
-        ) : (
-          <View style={styles.noThumb}>
-            <Ionicons
-              name={getDeviceIcon(fiche.appareil)}
-              size={26}
-              color={colors.accent}
-            />
-          </View>
-        )}
+      {/* Bande supérieure colorée selon l'état de l'atelier */}
+      <View
+        style={[styles.topAccentStrip, { backgroundColor: statusMeta.accent }]}
+      />
 
-        <View style={{ flex: 1, marginLeft: 12 }}>
-          <View style={styles.titleRow}>
-            <Text style={styles.name} numberOfLines={1}>
-              {fiche.client_nom}
-            </Text>
-            <View style={styles.cardActionsTop}>
-              <Pressable
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                  onEdit?.(fiche);
-                }}
-                disabled={busy}
-                style={({ pressed }) => [
-                  styles.iconActionBtn,
-                  styles.editActionBtn,
-                  pressed && { opacity: 0.75 },
-                ]}
-              >
-                <Ionicons name="create-outline" size={15} color={colors.accent} />
-                <Text style={styles.editActionText}>Modifier</Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-                  onDelete?.(fiche);
-                }}
-                disabled={busy}
-                style={({ pressed }) => [
-                  styles.iconActionBtn,
-                  styles.deleteActionBtn,
-                  pressed && { opacity: 0.75 },
-                ]}
-              >
-                <Ionicons name="trash-outline" size={15} color={colors.danger} />
-              </Pressable>
-            </View>
-          </View>
-
-          <Pressable
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-              callCustomer(fiche.client_tel);
-            }}
-            style={({ pressed }) => [
-              styles.phoneRow,
-              pressed && { opacity: 0.72 },
-            ]}
-          >
-            <Ionicons name="call" size={13} color={colors.success} />
-            <Text style={styles.phone}>{fiche.client_tel}</Text>
-            <View style={styles.callBadge}>
-              <Ionicons name="call-outline" size={11} color="#FFFFFF" />
-              <Text style={styles.callBadgeText}>Appeler</Text>
-            </View>
-          </Pressable>
-
-          <View style={styles.statusBadgesRow}>
-            <View style={[styles.badge, { backgroundColor: statusMeta.bg }]}>
-              <Ionicons name={statusMeta.icon} size={13} color={statusMeta.fg} />
-              <Text style={[styles.badgeText, { color: statusMeta.fg }]}>
-                {statusMeta.label}
-              </Text>
-            </View>
-            {!isDelivered && waitDays >= 1 ? (
+      <View style={styles.cardInner}>
+        {/* Top row: thumbnail + customer + status badge + Edit/Delete buttons */}
+        <View style={styles.headerRow}>
+          {fiche.photo_url ? (
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                setViewerOpen(true);
+              }}
+              onPressIn={() => bounce(cardScale, 0.97)}
+              onPressOut={() => bounce(cardScale, 1)}
+              style={styles.thumbWrap}
+            >
+              <Image source={{ uri: fiche.photo_url }} style={styles.thumb} />
+              <View style={styles.zoomBadge}>
+                <Ionicons name="expand" size={11} color="#FFFFFF" />
+              </View>
+            </Pressable>
+          ) : (
+            <View
+              style={[
+                styles.noThumb,
+                { borderColor: `${statusMeta.accent}33` },
+              ]}
+            >
+              <Ionicons
+                name={getDeviceIcon(fiche.appareil)}
+                size={26}
+                color={statusMeta.accent}
+              />
               <View
                 style={[
-                  styles.waitBadge,
-                  waitDays >= 5 && styles.waitBadgeUrgent,
+                  styles.noThumbCorner,
+                  { backgroundColor: statusMeta.accent },
                 ]}
               >
-                <Ionicons
-                  name="hourglass-outline"
-                  size={11}
-                  color={waitDays >= 5 ? colors.danger : colors.warningDark}
-                />
-                <Text
-                  style={[
-                    styles.waitBadgeText,
-                    { color: waitDays >= 5 ? colors.danger : colors.warningDark },
+                <Ionicons name="construct" size={9} color="#FFFFFF" />
+              </View>
+            </View>
+          )}
+
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <View style={styles.titleRow}>
+              <Text style={styles.name} numberOfLines={1}>
+                {fiche.client_nom}
+              </Text>
+              <View style={styles.cardActionsTop}>
+                <Pressable
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                    onEdit?.(fiche);
+                  }}
+                  disabled={busy}
+                  style={({ pressed }) => [
+                    styles.iconActionBtn,
+                    styles.editActionBtn,
+                    pressed && { opacity: 0.75 },
                   ]}
                 >
-                  {waitDays} j
+                  <Ionicons name="create-outline" size={14} color={colors.accent} />
+                  <Text style={styles.editActionText}>Modifier</Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+                    onDelete?.(fiche);
+                  }}
+                  disabled={busy}
+                  style={({ pressed }) => [
+                    styles.iconActionBtn,
+                    styles.deleteActionBtn,
+                    pressed && { opacity: 0.75 },
+                  ]}
+                >
+                  <Ionicons name="trash-outline" size={14} color={colors.danger} />
+                </Pressable>
+              </View>
+            </View>
+
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                callCustomer(fiche.client_tel);
+              }}
+              style={({ pressed }) => [
+                styles.phoneRow,
+                pressed && { opacity: 0.72 },
+              ]}
+            >
+              <Ionicons name="call" size={13} color={colors.success} />
+              <Text style={styles.phone}>{fiche.client_tel}</Text>
+              <View style={styles.callBadge}>
+                <Ionicons name="call-outline" size={11} color="#FFFFFF" />
+                <Text style={styles.callBadgeText}>Appeler</Text>
+              </View>
+            </Pressable>
+
+            <View style={styles.statusBadgesRow}>
+              <View style={[styles.badge, { backgroundColor: statusMeta.bg }]}>
+                {!isDelivered ? (
+                  <Animated.View
+                    style={[
+                      styles.statusPulseDot,
+                      {
+                        backgroundColor: statusMeta.fg,
+                        transform: [{ scale: pulseAnim }],
+                      },
+                    ]}
+                  />
+                ) : null}
+                <Animated.View
+                  style={
+                    isInProgress
+                      ? { transform: [{ rotate: toolRotate }] }
+                      : undefined
+                  }
+                >
+                  <Ionicons name={statusMeta.icon} size={13} color={statusMeta.fg} />
+                </Animated.View>
+                <Text style={[styles.badgeText, { color: statusMeta.fg }]}>
+                  {statusMeta.label}
                 </Text>
               </View>
-            ) : null}
+              {!isDelivered && waitDays >= 1 ? (
+                <View
+                  style={[
+                    styles.waitBadge,
+                    waitDays >= 5 && styles.waitBadgeUrgent,
+                  ]}
+                >
+                  <Ionicons
+                    name="hourglass-outline"
+                    size={11}
+                    color={waitDays >= 5 ? colors.danger : colors.warningDark}
+                  />
+                  <Text
+                    style={[
+                      styles.waitBadgeText,
+                      { color: waitDays >= 5 ? colors.danger : colors.warningDark },
+                    ]}
+                  >
+                    {waitDays} j
+                  </Text>
+                </View>
+              ) : null}
+            </View>
           </View>
         </View>
-      </View>
 
-      <View style={styles.divider} />
+        {/* BARRE DE PROGRESSION VISUELLE DE L'ATELIER (3 ÉTAPES) */}
+        <WorkshopProgressSteps statut={fiche.statut} accent={statusMeta.accent} />
 
-      {/* Device details box */}
-      <View style={styles.infoBox}>
-        <InfoRow
-          icon={getDeviceIcon(fiche.appareil)}
-          label="Appareil"
-          value={fiche.appareil}
-          bold
-        />
-        <InfoRow
-          icon="construct-outline"
-          label="Panne"
-          value={fiche.probleme}
-        />
-        <InfoRow
-          icon="cash-outline"
-          label="Total"
-          value={formatPrice(total)}
-          bold
-          highlight
-        />
-        {paid > 0 ? (
-          <InfoRow
-            icon="wallet-outline"
-            label="Avance"
-            value={formatPrice(paid)}
-            valueColor={colors.success}
-            bold
+        {/* FICHE TECHNIQUE : APPAREIL & DIAGNOSTIC PANNE */}
+        <View style={styles.techDiagnosticBox}>
+          <View style={styles.techRow}>
+            <View style={styles.techIconBadge}>
+              <Ionicons
+                name={getDeviceIcon(fiche.appareil)}
+                size={16}
+                color={colors.accent}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.techLabel}>APPAREIL DÉPOSÉ</Text>
+              <Text style={styles.techDeviceValue}>{fiche.appareil}</Text>
+            </View>
+            <View style={styles.datePill}>
+              <Ionicons name="calendar-outline" size={11} color={colors.muted} />
+              <Text style={styles.datePillText}>{formatDate(fiche.created_at)}</Text>
+            </View>
+          </View>
+
+          <View style={styles.techDivider} />
+
+          <View style={styles.techRow}>
+            <View style={[styles.techIconBadge, { backgroundColor: '#FEF3C7' }]}>
+              <Ionicons name="construct" size={15} color="#D97706" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.techLabel}>DIAGNOSTIC / PANNE SIGNALÉE</Text>
+              <Text style={styles.techProblemValue}>{fiche.probleme}</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* BANDEAU FINANCIER EN 3 COLONNES : TOTAL · AVANCE · RESTE À PAYER */}
+        <View style={styles.financeStrip}>
+          <View style={styles.financeCol}>
+            <Text style={styles.financeLabel}>Total réparation</Text>
+            <Text style={styles.financeTotal}>{formatPrice(total)}</Text>
+          </View>
+          <View style={styles.financeSep} />
+          <View style={styles.financeCol}>
+            <Text style={styles.financeLabel}>Avance payée</Text>
+            <Text style={[styles.financeVal, { color: colors.success }]}>
+              {formatPrice(paid)}
+            </Text>
+          </View>
+          <View style={styles.financeSep} />
+          <View style={styles.financeCol}>
+            <Text style={styles.financeLabel}>Reste à payer</Text>
+            <Text
+              style={[
+                styles.financeVal,
+                {
+                  color:
+                    total > 0 && reste === 0 ? colors.success : colors.danger,
+                },
+              ]}
+            >
+              {total > 0 && reste === 0 ? 'Soldé (0 FCFA)' : formatPrice(reste)}
+            </Text>
+          </View>
+        </View>
+
+        <Text style={styles.actionTitle}>
+          Prévenir {fiche.client_nom} :
+        </Text>
+        <View style={styles.actions}>
+          <Button
+            small
+            title="WhatsApp"
+            icon="logo-whatsapp"
+            variant="whatsapp"
+            onPress={onWhatsApp}
+            disabled={busy}
           />
-        ) : null}
-        {total > 0 ? (
-          <InfoRow
-            icon="card-outline"
-            label="Reste à payer"
-            value={reste === 0 ? 'Soldé (0 FCFA)' : formatPrice(reste)}
-            valueColor={reste === 0 ? colors.success : colors.danger}
-            bold
+          <View style={{ width: 10 }} />
+          <Button
+            small
+            title="SMS Direct"
+            icon="chatbubble-ellipses"
+            variant="sms"
+            onPress={onSms}
+            disabled={busy}
           />
-        ) : null}
-        <InfoRow
-          icon="calendar-outline"
-          label="Déposé"
-          value={formatDate(fiche.created_at)}
-          last
-        />
-      </View>
+        </View>
 
-      <Text style={styles.actionTitle}>
-        Prévenir {fiche.client_nom} :
-      </Text>
-      <View style={styles.actions}>
-        <Button
-          small
-          title="WhatsApp"
-          icon="logo-whatsapp"
-          variant="whatsapp"
-          onPress={onWhatsApp}
-          disabled={busy}
-        />
-        <View style={{ width: 10 }} />
-        <Button
-          small
-          title="SMS Direct"
-          icon="chatbubble-ellipses"
-          variant="sms"
-          onPress={onSms}
-          disabled={busy}
-        />
-      </View>
+        {/* Bottom row: Delivered + Delete */}
+        <View style={styles.bottomActionsRow}>
+          <Animated.View style={{ flex: 1, transform: [{ scale: doneScale }] }}>
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+                onDelivered?.(fiche);
+              }}
+              onPressIn={() => bounce(doneScale, 0.96)}
+              onPressOut={() => bounce(doneScale, 1)}
+              disabled={busy}
+              style={[
+                styles.deliveredBtn,
+                isDelivered && styles.deliveredBtnDone,
+              ]}
+            >
+              <Ionicons
+                name={isDelivered ? 'bag-check' : 'checkmark-done-circle-outline'}
+                size={18}
+                color={isDelivered ? colors.success : colors.textSecondary}
+              />
+              <Text
+                style={[
+                  styles.deliveredText,
+                  isDelivered && { color: colors.success },
+                ]}
+              >
+                {isDelivered
+                  ? 'Appareil récupéré (Remettre en atelier)'
+                  : 'Le client a récupéré son appareil'}
+              </Text>
+            </Pressable>
+          </Animated.View>
 
-      {/* Bottom row: Delivered + Delete */}
-      <View style={styles.bottomActionsRow}>
-        <Animated.View style={{ flex: 1, transform: [{ scale: doneScale }] }}>
           <Pressable
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-              onDelivered?.(fiche);
+              onDelete?.(fiche);
             }}
-            onPressIn={() => bounce(doneScale, 0.96)}
-            onPressOut={() => bounce(doneScale, 1)}
             disabled={busy}
-            style={[
-              styles.deliveredBtn,
-              isDelivered && styles.deliveredBtnDone,
+            style={({ pressed }) => [
+              styles.deleteCardBtn,
+              pressed && { opacity: 0.78 },
             ]}
           >
-            <Ionicons
-              name={isDelivered ? 'bag-check' : 'checkmark-done-circle-outline'}
-              size={18}
-              color={isDelivered ? colors.success : colors.textSecondary}
-            />
-            <Text
-              style={[
-                styles.deliveredText,
-                isDelivered && { color: colors.success },
-              ]}
-            >
-              {isDelivered
-                ? 'Appareil récupéré (Remettre en atelier)'
-                : 'Le client a récupéré son appareil'}
-            </Text>
+            <Ionicons name="trash-outline" size={16} color={colors.danger} />
+            <Text style={styles.deleteCardBtnText}>Supprimer</Text>
           </Pressable>
-        </Animated.View>
-
-        <Pressable
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-            onDelete?.(fiche);
-          }}
-          disabled={busy}
-          style={({ pressed }) => [
-            styles.deleteCardBtn,
-            pressed && { opacity: 0.78 },
-          ]}
-        >
-          <Ionicons name="trash-outline" size={16} color={colors.danger} />
-          <Text style={styles.deleteCardBtnText}>Supprimer</Text>
-        </Pressable>
+        </View>
       </View>
 
       {/* Fullscreen photo viewer */}
@@ -444,23 +564,92 @@ export default function RepairCard({
   );
 }
 
-function InfoRow({ icon, label, value, bold, highlight, valueColor, last }) {
+/**
+ * Barre de progression d'atelier en 3 étapes :
+ * 1. Réception & Diagnostic -> 2. Banc de réparation -> 3. Prêt / Récupéré
+ */
+function WorkshopProgressSteps({ statut, accent }) {
+  const isUnrepaired = statut === 'non_repare';
+  const isReady = statut === 'pret';
+  const isDelivered = statut === 'livre';
+  const step3Reached = isReady || isUnrepaired || isDelivered;
+
+  const steps = [
+    {
+      num: 1,
+      label: 'Diagnostic',
+      icon: 'hardware-chip-outline',
+      done: true,
+      color: colors.accent,
+    },
+    {
+      num: 2,
+      label: 'Banc réparation',
+      icon: 'construct-outline',
+      done: true,
+      active: !step3Reached,
+      color: accent,
+    },
+    {
+      num: 3,
+      label: isDelivered
+        ? 'Remis au client'
+        : isUnrepaired
+        ? 'Non réparé'
+        : 'Prêt à livrer',
+      icon: isUnrepaired
+        ? 'close-circle-outline'
+        : isDelivered
+        ? 'bag-check-outline'
+        : 'checkmark-done-circle-outline',
+      done: step3Reached,
+      active: step3Reached,
+      color: step3Reached ? accent : '#94A3B8',
+    },
+  ];
+
   return (
-    <View style={[styles.row, !last && styles.rowBorder]}>
-      <View style={styles.rowLabelWrap}>
-        <Ionicons name={icon} size={15} color={colors.muted} />
-        <Text style={styles.rowLabel}>{label}</Text>
-      </View>
-      <Text
-        style={[
-          styles.rowValue,
-          bold && styles.rowBold,
-          highlight && { color: colors.accent },
-          valueColor && { color: valueColor },
-        ]}
-      >
-        {value}
-      </Text>
+    <View style={styles.stepsContainer}>
+      {steps.map((s, idx) => (
+        <React.Fragment key={s.num}>
+          <View style={styles.stepItem}>
+            <View
+              style={[
+                styles.stepCircle,
+                s.done
+                  ? { backgroundColor: s.color, borderColor: s.color }
+                  : { backgroundColor: '#F1F5F9', borderColor: '#CBD5E1' },
+              ]}
+            >
+              <Ionicons
+                name={s.icon}
+                size={12}
+                color={s.done ? '#FFFFFF' : '#94A3B8'}
+              />
+            </View>
+            <Text
+              style={[
+                styles.stepLabel,
+                s.done && { color: colors.text, fontWeight: '800' },
+                s.active && { color: s.color, fontWeight: '900' },
+              ]}
+              numberOfLines={1}
+            >
+              {s.label}
+            </Text>
+          </View>
+          {idx < steps.length - 1 ? (
+            <View
+              style={[
+                styles.stepLine,
+                idx === 0 || step3Reached
+                  ? { backgroundColor: accent }
+                  : { backgroundColor: '#CBD5E1' },
+              ]}
+            />
+          ) : null}
+        </React.Fragment>
+      ))}
     </View>
   );
 }
@@ -469,11 +658,18 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.card,
     borderRadius: radius.lg,
-    padding: 16,
-    marginBottom: 15,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    overflow: 'hidden',
     ...shadow,
+  },
+  topAccentStrip: {
+    height: 5,
+    width: '100%',
+  },
+  cardInner: {
+    padding: 15,
   },
   headerRow: { flexDirection: 'row', alignItems: 'flex-start' },
   thumbWrap: {
@@ -496,9 +692,22 @@ const styles = StyleSheet.create({
     width: 66,
     height: 66,
     borderRadius: radius.md,
-    backgroundColor: colors.accentSoft,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  noThumbCorner: {
+    position: 'absolute',
+    right: -4,
+    bottom: -4,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
   },
   titleRow: {
     flexDirection: 'row',
@@ -565,6 +774,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
+  statusPulseDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 6,
+  },
   waitBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -583,32 +798,146 @@ const styles = StyleSheet.create({
     marginLeft: 3,
   },
   badgeText: { fontSize: 12, fontWeight: '800', marginLeft: 5 },
-  divider: { height: 1, backgroundColor: colors.border, marginVertical: 12 },
-  infoBox: {
+
+  // Workshop 3-step bar
+  stepsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginTop: 12,
+    marginBottom: 10,
+  },
+  stepItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  stepCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 5,
+  },
+  stepLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.muted,
+  },
+  stepLine: {
+    flex: 1,
+    height: 2,
+    marginHorizontal: 6,
+    borderRadius: 2,
+  },
+
+  // Technical Diagnostic Box
+  techDiagnosticBox: {
     backgroundColor: colors.surface,
     borderRadius: radius.md,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 10,
     borderWidth: 1,
-    borderColor: '#E8EEF6',
+    borderColor: '#E2E8F0',
   },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 7,
-  },
-  rowBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#E8EEF6',
-  },
-  rowLabelWrap: {
-    width: 96,
+  techRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  rowLabel: { fontSize: 13, fontWeight: '600', color: colors.muted, marginLeft: 6 },
-  rowValue: { flex: 1, fontSize: 14, fontWeight: '600', color: colors.text },
-  rowBold: { fontWeight: '800', fontSize: 15 },
+  techIconBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: colors.accentSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  techLabel: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: colors.muted,
+    letterSpacing: 0.5,
+  },
+  techDeviceValue: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: colors.text,
+    marginTop: 1,
+  },
+  techProblemValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
+  datePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginLeft: 6,
+  },
+  datePillText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.muted,
+    marginLeft: 4,
+  },
+  techDivider: {
+    height: 1,
+    backgroundColor: '#E2E8F0',
+    marginVertical: 8,
+  },
+
+  // 3-Column Financial Strip
+  financeStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingVertical: 9,
+    paddingHorizontal: 8,
+    marginTop: 9,
+  },
+  financeCol: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  financeSep: {
+    width: 1,
+    height: 26,
+    backgroundColor: '#E2E8F0',
+  },
+  financeLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.muted,
+  },
+  financeTotal: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: colors.accent,
+    marginTop: 2,
+  },
+  financeVal: {
+    fontSize: 13,
+    fontWeight: '900',
+    marginTop: 2,
+  },
+
   actionTitle: {
     fontSize: 12,
     fontWeight: '800',
@@ -617,50 +946,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   actions: { flexDirection: 'row' },
-  unrepairedBtn: {
-    marginTop: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: '#FFF1F2',
-    borderRadius: radius.sm,
-    borderWidth: 1.5,
-    borderColor: '#FECDD3',
-  },
-  unrepairedBtnActive: {
-    backgroundColor: '#FFE4E6',
-    borderColor: '#FB7185',
-  },
-  unrepairedBtnText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: colors.dangerDark || colors.danger,
-    marginLeft: 6,
-  },
-  reminderBtn: {
-    marginTop: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    backgroundColor: '#FFFBEB',
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: '#FDE68A',
-  },
-  reminderBtnHighlight: {
-    borderWidth: 1.5,
-    borderColor: '#F59E0B',
-  },
-  reminderBtnText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: colors.warningDark || '#B45309',
-    marginLeft: 6,
-  },
   bottomActionsRow: {
     marginTop: 9,
     flexDirection: 'row',
