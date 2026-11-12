@@ -342,7 +342,7 @@ export default function RepairCard({
       </View>
 
       <Text style={styles.actionTitle}>
-        Prévenir {fiche.client_nom} (Réparé ou Non réparé) :
+        Prévenir {fiche.client_nom} :
       </Text>
       <View style={styles.actions}>
         <Button
@@ -363,54 +363,6 @@ export default function RepairCard({
           disabled={busy}
         />
       </View>
-
-      {/* Dedicated button when repair failed: "Ça n'a pas marché — venez chercher l'appareil" */}
-      <Pressable
-        onPress={() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-          onUnrepaired?.(fiche);
-        }}
-        disabled={busy}
-        style={({ pressed }) => [
-          styles.unrepairedBtn,
-          fiche.statut === 'non_repare' && styles.unrepairedBtnActive,
-          pressed && { opacity: 0.82 },
-        ]}
-      >
-        <Ionicons
-          name="close-circle-outline"
-          size={18}
-          color={colors.dangerDark || colors.danger}
-        />
-        <Text style={styles.unrepairedBtnText}>
-          Ça n'a pas marché · Venez chercher l'appareil
-        </Text>
-      </Pressable>
-
-      {/* Relance button for devices not yet picked up */}
-      {!isDelivered ? (
-        <Pressable
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-            onReminder?.(fiche);
-          }}
-          disabled={busy}
-          style={({ pressed }) => [
-            styles.reminderBtn,
-            isWaitingPickup && styles.reminderBtnHighlight,
-            pressed && { opacity: 0.82 },
-          ]}
-        >
-          <Ionicons
-            name="notifications-outline"
-            size={17}
-            color={colors.warningDark || '#B45309'}
-          />
-          <Text style={styles.reminderBtnText}>
-            Relancer le client (Appareil non récupéré)
-          </Text>
-        </Pressable>
-      ) : null}
 
       {/* Bottom row: Delivered + Delete */}
       <View style={styles.bottomActionsRow}>
