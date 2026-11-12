@@ -62,22 +62,58 @@ export function formatDate(iso) {
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} à ${pad(d.getHours())}h${pad(d.getMinutes())}`;
 }
 
+export function daysSince(iso) {
+  if (!iso) return 0;
+  const diffMs = Date.now() - new Date(iso).getTime();
+  return Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+}
+
+export function computeBalance(prix, avance) {
+  const total = Math.max(0, Math.round(Number(prix) || 0));
+  const paid = Math.max(0, Math.round(Number(avance) || 0));
+  const reste = Math.max(0, total - paid);
+  return { total, paid, reste };
+}
+
 // ---------- Messages ----------
 
-export function depositMessage({ clientNom, appareil, atelier }) {
+export function depositMessage({ clientNom, appareil, prix, avance, atelier }) {
+  const { total, paid, reste } = computeBalance(prix, avance);
+  let financeText = '';
+  if (total > 0 && paid > 0) {
+    financeText =
+      reste > 0
+        ? ` Montant : ${formatPrice(total)} (Avance payée : ${formatPrice(paid)} · Reste à payer : ${formatPrice(reste)}).`
+        : ` Montant : ${formatPrice(total)} (Payé en totalité).`;
+  } else if (total > 0) {
+    financeText = ` Montant estimé : ${formatPrice(total)}.`;
+  } else if (paid > 0) {
+    financeText = ` Avance payée : ${formatPrice(paid)}.`;
+  }
+
   return (
     `RAPELO\n` +
     `Bonjour ${clientNom}, votre ${appareil} a bien été déposé chez ${atelier.atelierNom} ` +
-    `à ${atelier.localisation}. On vous prévient dès que c'est prêt ! Infoline: ${atelier.phone}`
+    `à ${atelier.localisation}.${financeText} On vous prévient dès que c'est prêt ! Infoline: ${atelier.phone}`
   );
 }
 
-export function readyMessage({ clientNom, appareil, prix, atelier }) {
-  const price = Number(prix) > 0 ? ` Montant à payer : ${formatPrice(prix)}.` : '';
+export function readyMessage({ clientNom, appareil, prix, avance, atelier }) {
+  const { total, paid, reste } = computeBalance(prix, avance);
+  let priceText = '';
+  if (total > 0 && paid > 0) {
+    priceText =
+      reste > 0
+        ? ` Total : ${formatPrice(total)} (Avance : ${formatPrice(paid)} · Reste à payer : ${formatPrice(reste)}).`
+        : ` Montant déjà réglé en totalité (${formatPrice(total)}).`;
+  } else if (total > 0) {
+    priceText = ` Montant à payer : ${formatPrice(total)}.`;
+  }
+
   return (
     `RAPELO\n` +
     `Bonjour ${clientNom}, bonne nouvelle ! Votre ${appareil} est prêt. ` +
-    `Vous pouvez venir le récupérer chez ${atelier.atelierNom} à ${atelier.localisation}.${price} ` +
+    `Vous pouvez venir le récupérer chez ${atelier.atelierNom} à ${atelier.localisation}.${priceText} ` +
     `Infoline: ${atelier.phone}`
   );
 }
@@ -89,6 +125,56 @@ export function unrepairedMessage({ clientNom, appareil, atelier }) {
     `à ${atelier.localisation} : malheureusement la réparation n'a pas pu aboutir. ` +
     `Vous pouvez venir récupérer votre appareil à l'atelier. Infoline: ${atelier.phone}`
   );
+}
+
+export function reminderMessage({ clientNom, appareil, prix, avance, statut, atelier }) {
+  const { total, paid, reste } = computeBalance(prix, avance);
+  if (statut === 'non_repare') {
+    return (
+      `RAPELO\n` +
+      `Bonjour ${clientNom}, petit rappel de ${atelier.atelierNom} (${atelier.localisation}) : ` +
+      `votre ${appareil} vous attend toujours à l'atelier. Merci de passer le récupérer dès que possible. ` +
+      `Infoline: ${atelier.phone}`
+    );
+  }
+  let resteInfo = '';
+  if (total > 0 && reste > 0) {
+    resteInfo =
+      paid > 0
+        ? ` Reste à payer : ${formatPrice(reste)} (sur ${formatPrice(total)}).`
+        : ` Montant à régler : ${formatPrice(total)}.`;
+  }
+  return (
+    `RAPELO\n` +
+    `Bonjour ${clientNom}, petit rappel de ${atelier.atelierNom} (${atelier.localisation}) : ` +
+    `votre ${appareil} est réparé et prêt, il vous attend à l'atelier.${resteInfo} ` +
+    `Merci de passer le récupérer. Infoline: ${atelier.phone}`
+  );
+}
+
+export async function callCustomer(phone) {
+  const raw = String(phone || '').trim();
+  const cleanNumber = raw.startsWith('+')
+    ? `+${digitsOnly(raw)}`
+    : digitsOnly(raw);
+
+  if (!cleanNumber) {
+    Alert.alert('Numéro manquant', 'Vérifie le numéro de téléphone du client.');
+    return false;
+  }
+
+  const url = `tel:${cleanNumber}`;
+  if (Platform.OS === 'web') {
+    window.location.href = url;
+    return true;
+  }
+  try {
+    await Linking.openURL(url);
+    return true;
+  } catch {
+    Alert.alert('Appel impossible', `Numéro du client : ${cleanNumber}`);
+    return false;
+  }
 }
 
 // ---------- Opening WhatsApp & SMS ----------

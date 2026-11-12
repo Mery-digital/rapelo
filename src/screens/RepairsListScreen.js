@@ -34,10 +34,13 @@ import {
   COUNTRY_DIAL_CODES,
   readyMessage,
   unrepairedMessage,
+  reminderMessage,
   openWhatsApp,
   openSms,
+  callCustomer,
   digitsOnly,
   toInternational,
+  computeBalance,
   formatPrice,
 } from '../lib/messaging';
 
@@ -116,9 +119,27 @@ export default function RepairsListScreen({
     setFilterStatus(next);
   };
 
-  // Send either "Réparé / Prêt" or "Non réparé (Venez chercher l'appareil)" via WhatsApp or SMS
+  // Send "Réparé / Prêt", "Non réparé", or "Relance (Appareil non récupéré)" via WhatsApp or SMS
   const handleSendOutcome = async (fiche, channel, outcome) => {
     setNotifyModal(null);
+
+    if (outcome === 'reminder') {
+      const msg = reminderMessage({
+        clientNom: fiche.client_nom,
+        appareil: fiche.appareil,
+        prix: fiche.prix_estime,
+        avance: fiche.avance_payee,
+        statut: fiche.statut,
+        atelier,
+      });
+      if (channel === 'whatsapp') {
+        await openWhatsApp(fiche.client_tel, msg, atelier.indicatif);
+      } else if (channel === 'sms') {
+        await openSms(fiche.client_tel, msg);
+      }
+      return;
+    }
+
     const targetStatut = outcome === 'non_repare' ? 'non_repare' : 'pret';
     const message =
       outcome === 'non_repare'
@@ -131,6 +152,7 @@ export default function RepairsListScreen({
             clientNom: fiche.client_nom,
             appareil: fiche.appareil,
             prix: fiche.prix_estime,
+            avance: fiche.avance_payee,
             atelier,
           });
 
@@ -166,6 +188,7 @@ export default function RepairsListScreen({
       appareil: fiche.appareil || '',
       probleme: fiche.probleme || '',
       prix: String(fiche.prix_estime ?? 0),
+      avance: String(fiche.avance_payee ?? 0),
       statut: fiche.statut || 'en_cours',
       photoUri: fiche.photo_url || null,
       originalPhotoUri: fiche.photo_url || null,
@@ -208,6 +231,7 @@ export default function RepairsListScreen({
         appareil: editModal.appareil.trim(),
         probleme: editModal.probleme.trim(),
         prix_estime: parseInt(digitsOnly(editModal.prix), 10) || 0,
+        avance_payee: parseInt(digitsOnly(editModal.avance), 10) || 0,
         statut: editModal.statut,
         photo_url: finalPhotoUrl || null,
       };
@@ -447,6 +471,7 @@ export default function RepairsListScreen({
               onWhatsApp={() => setNotifyModal({ fiche, mode: 'whatsapp' })}
               onSms={() => setNotifyModal({ fiche, mode: 'sms' })}
               onUnrepaired={() => setNotifyModal({ fiche, mode: 'unrepaired' })}
+              onReminder={() => setNotifyModal({ fiche, mode: 'reminder' })}
               onEdit={(f) => openEditModal(f)}
               onDelete={(f) =>
                 setConfirmModal({
@@ -484,6 +509,8 @@ export default function RepairsListScreen({
                       ? ['#16A34A', '#15803D']
                       : notifyModal.mode === 'sms'
                       ? ['#2563EB', '#1E40AF']
+                      : notifyModal.mode === 'reminder'
+                      ? ['#D97706', '#B45309']
                       : ['#DC2626', '#991B1B']
                   }
                   start={{ x: 0, y: 0 }}
@@ -497,6 +524,8 @@ export default function RepairsListScreen({
                           ? 'logo-whatsapp'
                           : notifyModal.mode === 'sms'
                           ? 'chatbubble-ellipses'
+                          : notifyModal.mode === 'reminder'
+                          ? 'notifications'
                           : 'close-circle'
                       }
                       size={26}
@@ -509,6 +538,8 @@ export default function RepairsListScreen({
                         ? 'RAPELO · MESSAGE WHATSAPP'
                         : notifyModal.mode === 'sms'
                         ? 'RAPELO · SMS DIRECT'
+                        : notifyModal.mode === 'reminder'
+                        ? 'RAPELO · RELANCE CLIENT'
                         : 'RAPELO · APPAREIL NON RÉPARÉ'}
                     </Text>
                     <Text style={styles.choiceClientName} numberOfLines={1}>
@@ -527,7 +558,75 @@ export default function RepairsListScreen({
                 </LinearGradient>
 
                 <View style={styles.choiceBody}>
-                  {notifyModal.mode === 'unrepaired' ? (
+                  {notifyModal.mode === 'reminder' ? (
+                    <>
+                      <Text style={styles.choiceQuestion}>
+                        Relancer {notifyModal.fiche.client_nom} pour qu'il vienne récupérer son{' '}
+                        {notifyModal.fiche.appareil} :
+                      </Text>
+
+                      <View style={[styles.outcomeCard, styles.outcomeCardReminder]}>
+                        <View style={styles.outcomeTopRow}>
+                          <View style={[styles.outcomeIconWrap, { backgroundColor: '#FEF3C7' }]}>
+                            <Ionicons name="notifications" size={24} color="#B45309" />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={[styles.outcomeTitle, { color: '#92400E' }]}>
+                              Rappel · Appareil non récupéré
+                            </Text>
+                            <Text style={styles.outcomePreview}>
+                              «{' '}
+                              {reminderMessage({
+                                clientNom: notifyModal.fiche.client_nom,
+                                appareil: notifyModal.fiche.appareil,
+                                prix: notifyModal.fiche.prix_estime,
+                                avance: notifyModal.fiche.avance_payee,
+                                statut: notifyModal.fiche.statut,
+                                atelier,
+                              })}{' '}
+                              »
+                            </Text>
+                          </View>
+                        </View>
+
+                        <View style={{ flexDirection: 'row', marginTop: 12 }}>
+                          <Button
+                            small
+                            title="WhatsApp"
+                            icon="logo-whatsapp"
+                            variant="whatsapp"
+                            onPress={() =>
+                              handleSendOutcome(notifyModal.fiche, 'whatsapp', 'reminder')
+                            }
+                          />
+                          <View style={{ width: 10 }} />
+                          <Button
+                            small
+                            title="SMS Direct"
+                            icon="chatbubble-ellipses"
+                            variant="sms"
+                            onPress={() =>
+                              handleSendOutcome(notifyModal.fiche, 'sms', 'reminder')
+                            }
+                          />
+                        </View>
+
+                        <Pressable
+                          onPress={() => {
+                            const tel = notifyModal.fiche.client_tel;
+                            setNotifyModal(null);
+                            callCustomer(tel);
+                          }}
+                          style={styles.callDirectSheetBtn}
+                        >
+                          <Ionicons name="call" size={16} color={colors.success} />
+                          <Text style={styles.callDirectSheetText}>
+                            Appeler directement {notifyModal.fiche.client_nom} ({notifyModal.fiche.client_tel})
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </>
+                  ) : notifyModal.mode === 'unrepaired' ? (
                     <>
                       <Text style={styles.choiceQuestion}>
                         Ça n'a pas marché ? Préviens {notifyModal.fiche.client_nom} de venir chercher son appareil :
@@ -616,8 +715,14 @@ export default function RepairsListScreen({
                             </Text>
                             <Text style={styles.outcomePreview}>
                               « RAPELO — Bonjour {notifyModal.fiche.client_nom}, bonne nouvelle !
-                              Votre {notifyModal.fiche.appareil} est prêt (
-                              {formatPrice(notifyModal.fiche.prix_estime)}). »
+                              Votre {notifyModal.fiche.appareil} est prêt (Reste à payer :{' '}
+                              {formatPrice(
+                                computeBalance(
+                                  notifyModal.fiche.prix_estime,
+                                  notifyModal.fiche.avance_payee
+                                ).reste
+                              )}
+                              ). »
                             </Text>
                           </View>
                         </View>
@@ -686,6 +791,23 @@ export default function RepairsListScreen({
                             Envoyer « Venez chercher l'appareil »
                           </Text>
                         </View>
+                      </Pressable>
+
+                      {/* OPTION 3 : RELANCE RAPIDE SI LE CLIENT TARDE À VENIR */}
+                      <Pressable
+                        onPress={() =>
+                          handleSendOutcome(
+                            notifyModal.fiche,
+                            notifyModal.mode,
+                            'reminder'
+                          )
+                        }
+                        style={styles.quickReminderRowBtn}
+                      >
+                        <Ionicons name="notifications-outline" size={16} color="#B45309" />
+                        <Text style={styles.quickReminderRowText}>
+                          Envoyer une relance (appareil toujours non récupéré)
+                        </Text>
                       </Pressable>
                     </>
                   )}
@@ -841,7 +963,7 @@ export default function RepairsListScreen({
                 />
 
                 <Field
-                  label="Montant / Prix (FCFA)"
+                  label="Montant total de la réparation (FCFA)"
                   icon="cash-outline"
                   rightSuffix="FCFA"
                   placeholder="Ex : 15000"
@@ -851,6 +973,27 @@ export default function RepairsListScreen({
                     setEditModal((m) => ({ ...m, prix: digitsOnly(v) }))
                   }
                 />
+
+                <Field
+                  label="Avance payée par le client (FCFA)"
+                  icon="wallet-outline"
+                  rightSuffix="FCFA"
+                  placeholder="Ex : 5000"
+                  keyboardType="number-pad"
+                  value={editModal.avance}
+                  onChangeText={(v) =>
+                    setEditModal((m) => ({ ...m, avance: digitsOnly(v) }))
+                  }
+                />
+
+                <View style={styles.editBalanceRow}>
+                  <Text style={styles.editBalanceLabel}>Reste à payer :</Text>
+                  <Text style={styles.editBalanceValue}>
+                    {formatPrice(
+                      computeBalance(editModal.prix, editModal.avance).reste
+                    )}
+                  </Text>
+                </View>
 
                 <View style={styles.editFooterRow}>
                   <Button
@@ -1160,6 +1303,68 @@ const styles = StyleSheet.create({
   outcomeCardUnrepaired: {
     backgroundColor: '#FEF2F2',
     borderColor: '#EF4444',
+  },
+  outcomeCardReminder: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#F59E0B',
+  },
+  callDirectSheetBtn: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: radius.sm,
+    backgroundColor: '#DCFCE7',
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+  },
+  callDirectSheetText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#15803D',
+    marginLeft: 6,
+  },
+  quickReminderRowBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1.5,
+    borderColor: '#FDE68A',
+    borderRadius: radius.md,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 10,
+  },
+  quickReminderRowText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#B45309',
+    marginLeft: 6,
+  },
+  editBalanceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    borderRadius: radius.md,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 12,
+  },
+  editBalanceLabel: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.textSecondary,
+  },
+  editBalanceValue: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: colors.danger,
   },
   outcomeTopRow: {
     flexDirection: 'row',

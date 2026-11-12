@@ -24,6 +24,8 @@ import {
   openSms,
   digitsOnly,
   toInternational,
+  computeBalance,
+  formatPrice,
 } from '../lib/messaging';
 
 export const DEVICE_CATEGORIES = [
@@ -57,6 +59,7 @@ export default function NewRepairScreen({ atelier, onCreated }) {
     appareil: '',
     probleme: '',
     prix: '',
+    avance: '',
     photoUri: null,
   });
 
@@ -121,9 +124,13 @@ export default function NewRepairScreen({ atelier, onCreated }) {
     const storedPhone = rawTel.startsWith('+') ? rawTel : `+${intlDigits}`;
 
     const fullDeviceName = form.appareil.trim();
+    const prixNum = parseInt(digitsOnly(form.prix), 10) || 0;
+    const avanceNum = parseInt(digitsOnly(form.avance), 10) || 0;
     const message = depositMessage({
       clientNom: form.clientNom.trim(),
       appareil: fullDeviceName,
+      prix: prixNum,
+      avance: avanceNum,
       atelier,
     });
 
@@ -137,7 +144,8 @@ export default function NewRepairScreen({ atelier, onCreated }) {
       client_tel: storedPhone,
       appareil: fullDeviceName,
       probleme: form.probleme.trim(),
-      prix_estime: parseInt(digitsOnly(form.prix), 10) || 0,
+      prix_estime: prixNum,
+      avance_payee: avanceNum,
       statut: 'en_cours',
     };
     if (savedPhotoUrl) {
@@ -319,9 +327,9 @@ export default function NewRepairScreen({ atelier, onCreated }) {
           ))}
         </View>
 
-        {/* 5. Price in FCFA */}
+        {/* 5. Price & Advance in FCFA */}
         <Field
-          label="Prix estimé de la réparation"
+          label="Prix estimé de la réparation (Total)"
           icon="cash-outline"
           rightSuffix="FCFA"
           placeholder="Ex : 15000"
@@ -329,6 +337,20 @@ export default function NewRepairScreen({ atelier, onCreated }) {
           value={form.prix}
           onChangeText={(v) => set('prix')(digitsOnly(v))}
         />
+
+        <Field
+          label="Avance payée par le client (Acompte)"
+          icon="wallet-outline"
+          rightSuffix="FCFA"
+          placeholder="Ex : 5000 (laisse vide si 0)"
+          keyboardType="number-pad"
+          value={form.avance}
+          onChangeText={(v) => set('avance')(digitsOnly(v))}
+        />
+
+        {Number(form.prix) > 0 || Number(form.avance) > 0 ? (
+          <BalancePreview prix={form.prix} avance={form.avance} />
+        ) : null}
 
         <View style={styles.divider} />
 
@@ -358,6 +380,38 @@ export default function NewRepairScreen({ atelier, onCreated }) {
         </View>
       </View>
     </Animated.ScrollView>
+  );
+}
+
+function BalancePreview({ prix, avance }) {
+  const { total, paid, reste } = computeBalance(prix, avance);
+  const isPaidFull = total > 0 && reste === 0;
+  return (
+    <View style={[styles.balanceCard, isPaidFull && styles.balanceCardPaid]}>
+      <View style={styles.balanceItem}>
+        <Text style={styles.balanceLabel}>Total</Text>
+        <Text style={styles.balanceValue}>{formatPrice(total)}</Text>
+      </View>
+      <View style={styles.balanceSep} />
+      <View style={styles.balanceItem}>
+        <Text style={styles.balanceLabel}>Avance payée</Text>
+        <Text style={[styles.balanceValue, { color: colors.success }]}>
+          {formatPrice(paid)}
+        </Text>
+      </View>
+      <View style={styles.balanceSep} />
+      <View style={styles.balanceItem}>
+        <Text style={styles.balanceLabel}>Reste à payer</Text>
+        <Text
+          style={[
+            styles.balanceValue,
+            { color: isPaidFull ? colors.success : colors.danger },
+          ]}
+        >
+          {isPaidFull ? 'Soldé (0 FCFA)' : formatPrice(reste)}
+        </Text>
+      </View>
+    </View>
   );
 }
 
@@ -523,6 +577,42 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: colors.border,
     marginVertical: 14,
+  },
+  balanceCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    borderRadius: radius.md,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    marginTop: -4,
+    marginBottom: 4,
+  },
+  balanceCardPaid: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#86EFAC',
+  },
+  balanceItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  balanceSep: {
+    width: 1,
+    height: 28,
+    backgroundColor: '#E2E8F0',
+  },
+  balanceLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.muted,
+  },
+  balanceValue: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: colors.text,
+    marginTop: 2,
   },
   sendLabel: {
     fontSize: 13,

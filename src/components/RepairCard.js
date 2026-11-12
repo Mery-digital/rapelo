@@ -13,7 +13,13 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Button from './Button';
 import { colors, radius, shadow } from '../theme';
-import { formatPrice, formatDate } from '../lib/messaging';
+import {
+  formatPrice,
+  formatDate,
+  daysSince,
+  computeBalance,
+  callCustomer,
+} from '../lib/messaging';
 
 /** Pick a fitting Ionicon based on the device name (phone, PC, TV, console, etc.) */
 function getDeviceIcon(appareil = '') {
@@ -110,6 +116,7 @@ export default function RepairCard({
   onWhatsApp,
   onSms,
   onUnrepaired,
+  onReminder,
   onDelivered,
   onEdit,
   onDelete,
@@ -117,6 +124,13 @@ export default function RepairCard({
 }) {
   const statusMeta = getStatusMeta(fiche.statut);
   const isDelivered = fiche.statut === 'livre';
+  const isWaitingPickup =
+    fiche.statut === 'pret' || fiche.statut === 'non_repare';
+  const waitDays = daysSince(fiche.pret_le || fiche.created_at);
+  const { total, paid, reste } = computeBalance(
+    fiche.prix_estime,
+    fiche.avance_payee
+  );
   const [viewerOpen, setViewerOpen] = useState(false);
 
   // Staggered entrance animation when cards appear / scroll into view
@@ -228,16 +242,53 @@ export default function RepairCard({
             </View>
           </View>
 
-          <View style={styles.phoneRow}>
-            <Ionicons name="call-outline" size={13} color={colors.muted} />
+          <Pressable
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+              callCustomer(fiche.client_tel);
+            }}
+            style={({ pressed }) => [
+              styles.phoneRow,
+              pressed && { opacity: 0.72 },
+            ]}
+          >
+            <Ionicons name="call" size={13} color={colors.success} />
             <Text style={styles.phone}>{fiche.client_tel}</Text>
-          </View>
+            <View style={styles.callBadge}>
+              <Ionicons name="call-outline" size={11} color="#FFFFFF" />
+              <Text style={styles.callBadgeText}>Appeler</Text>
+            </View>
+          </Pressable>
 
-          <View style={[styles.badge, { backgroundColor: statusMeta.bg }]}>
-            <Ionicons name={statusMeta.icon} size={13} color={statusMeta.fg} />
-            <Text style={[styles.badgeText, { color: statusMeta.fg }]}>
-              {statusMeta.label}
-            </Text>
+          <View style={styles.statusBadgesRow}>
+            <View style={[styles.badge, { backgroundColor: statusMeta.bg }]}>
+              <Ionicons name={statusMeta.icon} size={13} color={statusMeta.fg} />
+              <Text style={[styles.badgeText, { color: statusMeta.fg }]}>
+                {statusMeta.label}
+              </Text>
+            </View>
+            {!isDelivered && waitDays >= 1 ? (
+              <View
+                style={[
+                  styles.waitBadge,
+                  waitDays >= 5 && styles.waitBadgeUrgent,
+                ]}
+              >
+                <Ionicons
+                  name="hourglass-outline"
+                  size={11}
+                  color={waitDays >= 5 ? colors.danger : colors.warningDark}
+                />
+                <Text
+                  style={[
+                    styles.waitBadgeText,
+                    { color: waitDays >= 5 ? colors.danger : colors.warningDark },
+                  ]}
+                >
+                  {waitDays} j
+                </Text>
+              </View>
+            ) : null}
           </View>
         </View>
       </View>
@@ -259,11 +310,29 @@ export default function RepairCard({
         />
         <InfoRow
           icon="cash-outline"
-          label="Montant"
-          value={formatPrice(fiche.prix_estime)}
+          label="Total"
+          value={formatPrice(total)}
           bold
           highlight
         />
+        {paid > 0 ? (
+          <InfoRow
+            icon="wallet-outline"
+            label="Avance"
+            value={formatPrice(paid)}
+            valueColor={colors.success}
+            bold
+          />
+        ) : null}
+        {total > 0 ? (
+          <InfoRow
+            icon="card-outline"
+            label="Reste à payer"
+            value={reste === 0 ? 'Soldé (0 FCFA)' : formatPrice(reste)}
+            valueColor={reste === 0 ? colors.success : colors.danger}
+            bold
+          />
+        ) : null}
         <InfoRow
           icon="calendar-outline"
           label="Déposé"
@@ -317,6 +386,31 @@ export default function RepairCard({
           Ça n'a pas marché · Venez chercher l'appareil
         </Text>
       </Pressable>
+
+      {/* Relance button for devices not yet picked up */}
+      {!isDelivered ? (
+        <Pressable
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+            onReminder?.(fiche);
+          }}
+          disabled={busy}
+          style={({ pressed }) => [
+            styles.reminderBtn,
+            isWaitingPickup && styles.reminderBtnHighlight,
+            pressed && { opacity: 0.82 },
+          ]}
+        >
+          <Ionicons
+            name="notifications-outline"
+            size={17}
+            color={colors.warningDark || '#B45309'}
+          />
+          <Text style={styles.reminderBtnText}>
+            Relancer le client (Appareil non récupéré)
+          </Text>
+        </Pressable>
+      ) : null}
 
       {/* Bottom row: Delivered + Delete */}
       <View style={styles.bottomActionsRow}>
@@ -398,7 +492,7 @@ export default function RepairCard({
   );
 }
 
-function InfoRow({ icon, label, value, bold, highlight, last }) {
+function InfoRow({ icon, label, value, bold, highlight, valueColor, last }) {
   return (
     <View style={[styles.row, !last && styles.rowBorder]}>
       <View style={styles.rowLabelWrap}>
@@ -410,6 +504,7 @@ function InfoRow({ icon, label, value, bold, highlight, last }) {
           styles.rowValue,
           bold && styles.rowBold,
           highlight && { color: colors.accent },
+          valueColor && { color: valueColor },
         ]}
       >
         {value}
@@ -487,8 +582,29 @@ const styles = StyleSheet.create({
     borderColor: '#FECACA',
     paddingHorizontal: 7,
   },
-  phoneRow: { flexDirection: 'row', alignItems: 'center', marginTop: 3 },
-  phone: { fontSize: 13, fontWeight: '600', color: colors.muted, marginLeft: 5 },
+  phoneRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+  phone: { fontSize: 13, fontWeight: '700', color: colors.textSecondary, marginLeft: 5 },
+  callBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.success,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    marginLeft: 8,
+  },
+  callBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+    marginLeft: 3,
+  },
+  statusBadgesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginTop: 7,
+  },
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -496,7 +612,23 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    marginTop: 7,
+  },
+  waitBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.warningSoft,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginLeft: 6,
+  },
+  waitBadgeUrgent: {
+    backgroundColor: colors.dangerSoft,
+  },
+  waitBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    marginLeft: 3,
   },
   badgeText: { fontSize: 12, fontWeight: '800', marginLeft: 5 },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: 12 },
@@ -553,6 +685,28 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     color: colors.dangerDark || colors.danger,
+    marginLeft: 6,
+  },
+  reminderBtn: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    backgroundColor: '#FFFBEB',
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  reminderBtnHighlight: {
+    borderWidth: 1.5,
+    borderColor: '#F59E0B',
+  },
+  reminderBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: colors.warningDark || '#B45309',
     marginLeft: 6,
   },
   bottomActionsRow: {
