@@ -435,6 +435,7 @@ export default function NewRepairScreen({ atelier, onCreated }) {
             subtitle="Reçu instantané"
             icon="logo-whatsapp"
             variant="whatsapp"
+            feedbackVariant="scale-ripple"
             loading={sending === 'whatsapp'}
             disabled={!!sending}
             onPress={() => submit('whatsapp')}
@@ -445,6 +446,7 @@ export default function NewRepairScreen({ atelier, onCreated }) {
             subtitle="Sans internet"
             icon="chatbubble-ellipses"
             variant="sms"
+            feedbackVariant="scale-ripple"
             loading={sending === 'sms'}
             disabled={!!sending}
             onPress={() => submit('sms')}

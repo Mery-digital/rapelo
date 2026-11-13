@@ -651,6 +651,7 @@ export default function RepairsListScreen({
                         title="WhatsApp"
                         icon="logo-whatsapp"
                         variant="whatsapp"
+                        feedbackVariant="scale-ripple"
                         onPress={() =>
                           handleSendOutcome(notifyModal.fiche, 'whatsapp', 'reminder')
                         }
@@ -661,6 +662,7 @@ export default function RepairsListScreen({
                         title="SMS Direct"
                         icon="chatbubble-ellipses"
                         variant="sms"
+                        feedbackVariant="scale-ripple"
                         onPress={() =>
                           handleSendOutcome(notifyModal.fiche, 'sms', 'reminder')
                         }
@@ -1168,44 +1170,31 @@ export default function RepairsListScreen({
                 </Text>
 
                 <View style={styles.confirmBtnRow}>
-                  <Pressable
+                  <Button
+                    size="sm"
+                    title="Annuler"
+                    variant="tertiary"
                     onPress={() => setConfirmModal(null)}
-                    style={[
-                      styles.confirmBtn,
-                      {
-                        backgroundColor: theme.surface,
-                        borderWidth: 1.5,
-                        borderColor: theme.border,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[styles.confirmBtnCancelText, { color: theme.textSecondary }]}
-                    >
-                      Annuler
-                    </Text>
-                  </Pressable>
+                  />
                   <View style={{ width: 10 }} />
-                  <Pressable
-                    onPress={executeConfirmAction}
-                    style={[
-                      styles.confirmBtn,
-                      {
-                        backgroundColor:
-                          confirmModal.type === 'delivered'
-                            ? theme.whatsapp
-                            : theme.danger,
-                      },
-                    ]}
-                  >
-                    <Text style={styles.confirmBtnActionText}>
-                      {confirmModal.type === 'delivered'
+                  <Button
+                    size="sm"
+                    variant={confirmModal.type === 'delivered' ? 'whatsapp' : 'danger'}
+                    feedbackVariant="scale-ripple"
+                    icon={
+                      confirmModal.type === 'delivered'
+                        ? 'checkmark-circle'
+                        : 'trash'
+                    }
+                    title={
+                      confirmModal.type === 'delivered'
                         ? confirmModal.fiche?.statut === 'livre'
                           ? 'Oui, remettre'
                           : 'Oui, récupéré'
-                        : 'Oui, supprimer'}
-                    </Text>
-                  </Pressable>
+                        : 'Oui, supprimer'
+                    }
+                    onPress={executeConfirmAction}
+                  />
                 </View>
               </>
             ) : null}

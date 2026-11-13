@@ -442,6 +442,7 @@ export default function RepairCard({
             title="WhatsApp"
             icon="logo-whatsapp"
             variant="whatsapp"
+            feedbackVariant="scale-ripple"
             onPress={onWhatsApp}
             disabled={busy}
           />
@@ -451,6 +452,7 @@ export default function RepairCard({
             title="SMS Direct"
             icon="chatbubble-ellipses"
             variant="sms"
+            feedbackVariant="scale-ripple"
             onPress={onSms}
             disabled={busy}
           />

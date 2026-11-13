@@ -822,6 +822,8 @@ export function HeroCloseButton({
   );
 }
 
+export { default as HeroButton, useButton } from './Button';
+
 const styles = StyleSheet.create({
   closeBtnBase: {
     alignItems: 'center',
