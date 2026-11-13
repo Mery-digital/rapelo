@@ -41,36 +41,42 @@ function AppContent() {
     );
   }
 
-  if (session) {
-    return (
-      <>
-        <StatusBar style="light" />
-        <MainScreen
-          atelier={session}
-          onAtelierUpdated={(updatedProfile) => {
-            setSavedAtelier(updatedProfile);
-            setSession(updatedProfile);
-          }}
-          onLogout={() => setSession(null)}
-        />
-      </>
-    );
-  }
-
   return (
-    <>
-      <StatusBar style={isDark ? 'light' : 'dark'} />
-      <SetupScreen
-        key={savedAtelier ? 'login' : 'setup'}
-        mode={savedAtelier ? 'login' : 'setup'}
-        savedAtelier={savedAtelier}
-        onDone={(profile) => {
-          setSavedAtelier(profile);
-          setSession(profile);
-        }}
-        onReset={() => setSavedAtelier(null)}
-      />
-    </>
+    <View style={[styles.root, { backgroundColor: isDark ? '#09090B' : '#E4E4E7' }]}>
+      <View
+        style={[
+          styles.mobileContainer,
+          {
+            backgroundColor: theme.bg,
+            borderColor: isDark ? '#27272A' : '#D4D4D8',
+          },
+        ]}
+      >
+        <StatusBar style={session ? 'light' : isDark ? 'light' : 'dark'} />
+
+        {session ? (
+          <MainScreen
+            atelier={session}
+            onAtelierUpdated={(updatedProfile) => {
+              setSavedAtelier(updatedProfile);
+              setSession(updatedProfile);
+            }}
+            onLogout={() => setSession(null)}
+          />
+        ) : (
+          <SetupScreen
+            key={savedAtelier ? 'login' : 'setup'}
+            mode={savedAtelier ? 'login' : 'setup'}
+            savedAtelier={savedAtelier}
+            onDone={(profile) => {
+              setSavedAtelier(profile);
+              setSession(profile);
+            }}
+            onReset={() => setSavedAtelier(null)}
+          />
+        )}
+      </View>
+    </View>
   );
 }
 
@@ -87,5 +93,34 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  root: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mobileContainer: {
+    flex: 1,
+    width: '100%',
+    maxWidth: 500,
+    height: '100%',
+    overflow: 'hidden',
+    ...Platform.select({
+      web: {
+        borderLeftWidth: 1,
+        borderRightWidth: 1,
+        shadowColor: '#000000',
+        shadowOpacity: 0.16,
+        shadowRadius: 24,
+        shadowOffset: { width: 0, height: 6 },
+      },
+      default: {},
+    }),
+  },
 });
