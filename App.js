@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import SetupScreen from './src/screens/SetupScreen';
@@ -17,6 +17,18 @@ export default function App() {
       setSavedAtelier(profile);
       setBooting(false);
     });
+
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      if (typeof document !== 'undefined' && !document.querySelector('link[rel="manifest"]')) {
+        const link = document.createElement('link');
+        link.rel = 'manifest';
+        link.href = '/manifest.json';
+        document.head.appendChild(link);
+      }
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
+      }
+    }
   }, []);
 
   if (booting) {

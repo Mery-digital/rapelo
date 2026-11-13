@@ -31,11 +31,13 @@
     "web": {
       "bundler": "metro",
       "output": "single",
-      "favicon": "./assets/logo.jpg",
-      "name": "RAPELO",
+      "favicon": "./public/favicon.png",
+      "name": "RAPELO - Gestion d'Atelier de Réparation",
       "shortName": "RAPELO",
+      "description": "Application professionnelle de gestion d'atelier électronique et réparation avec suivi client par WhatsApp et SMS.",
+      "lang": "fr",
       "themeColor": "#0F172A",
-      "backgroundColor": "#F1F5F9"
+      "backgroundColor": "#0F172A"
     }
   }
 }
