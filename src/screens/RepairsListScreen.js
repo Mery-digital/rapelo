@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -7,27 +7,31 @@ import {
   Alert,
   RefreshControl,
   Animated,
-  Easing,
   LayoutAnimation,
-  Modal,
   ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import RepairCard from '../components/RepairCard';
-import Field from '../components/Field';
+import Field, { HeroTextArea } from '../components/Field';
 import Button from '../components/Button';
 import PhotoPicker from '../components/PhotoPicker';
 import {
+  HeroAlert,
   HeroBottomSheet,
+  HeroCard,
+  HeroChip,
   HeroCloseButton,
+  HeroDialog,
   HeroSearchField,
+  HeroSeparator,
+  HeroSurface,
   RepairCardSkeleton,
   useToast,
 } from '../components/HeroUI';
 import { useTheme } from '../context/ThemeContext';
-import { radius, shadow, shadowSoft } from '../theme';
+import { radius, shadowSoft } from '../theme';
 import {
   updateRepairStatus,
   updateRepair,
@@ -63,24 +67,24 @@ export default function RepairsListScreen({
   const { showToast } = useToast();
 
   const STATUS_OPTIONS = [
-    { id: 'en_cours', label: 'En réparation', icon: 'time-outline', color: theme.accent },
-    { id: 'pret', label: 'Réparé / Prêt', icon: 'checkmark-circle-outline', color: theme.success },
-    { id: 'non_repare', label: 'Non réparé', icon: 'close-circle-outline', color: theme.danger },
-    { id: 'livre', label: 'Récupéré', icon: 'bag-check-outline', color: theme.muted },
+    { id: 'en_cours', label: 'En réparation', icon: 'construct', color: theme.accent },
+    { id: 'pret', label: 'Prêt à livrer', icon: 'checkmark-circle', color: theme.success },
+    { id: 'non_repare', label: 'Non réparé', icon: 'close-circle', color: theme.danger },
+    { id: 'livre', label: 'Remis au client', icon: 'bag-check', color: theme.muted },
   ];
 
   const [query, setQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [busyId, setBusyId] = useState(null);
 
-  // { fiche, mode: 'whatsapp' | 'sms' | 'unrepaired' | 'reminder' }
+  // BottomSheet message state
   const [notifyModal, setNotifyModal] = useState(null);
 
-  // Edit BottomSheet state
+  // BottomSheet edit state
   const [editModal, setEditModal] = useState(null);
   const [savingEdit, setSavingEdit] = useState(false);
 
-  // Confirmation dialog state
+  // Dialog confirmation state
   const [confirmModal, setConfirmModal] = useState(null);
 
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -99,101 +103,43 @@ export default function RepairsListScreen({
     const qDigits = digitsOnly(q);
     return repairs.filter((r) => {
       if (filterStatus === 'all' && r.statut === 'livre') return false;
-      if (filterStatus === 'en_cours' && r.statut !== 'en_cours') return false;
-      if (filterStatus === 'pret' && r.statut !== 'pret') return false;
-      if (filterStatus === 'non_repare' && r.statut !== 'non_repare') return false;
-      if (filterStatus === 'livre' && r.statut !== 'livre') return false;
+      if (filterStatus !== 'all' && r.statut !== filterStatus) return false;
       if (!q) return true;
-      const byName = (r.client_nom || '').toLowerCase().includes(q);
-      const byDevice = (r.appareil || '').toLowerCase().includes(q);
-      const byProblem = (r.probleme || '').toLowerCase().includes(q);
-      const byPhone = qDigits.length > 0 && digitsOnly(r.client_tel).includes(qDigits);
-      return byName || byDevice || byProblem || byPhone;
+      const nom = (r.client_nom || '').toLowerCase();
+      const appareil = (r.appareil || '').toLowerCase();
+      const tel = digitsOnly(r.client_tel || '');
+      const prob = (r.probleme || '').toLowerCase();
+      return (
+        nom.includes(q) ||
+        appareil.includes(q) ||
+        prob.includes(q) ||
+        (qDigits && tel.includes(qDigits))
+      );
     });
   }, [repairs, query, filterStatus]);
 
-  const handleQueryChange = (text) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setQuery(text);
-  };
-
-  const handleFilterChange = (next) => {
+  const handleFilterChange = (id) => {
     Haptics.selectionAsync().catch(() => {});
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setFilterStatus(next);
+    setFilterStatus(id);
   };
 
-  const handleSendOutcome = async (fiche, channel, outcome) => {
+  const handleSendOutcome = (fiche, channel, outcome) => {
     setNotifyModal(null);
+    let msg = '';
+    if (outcome === 'ready') msg = readyMessage(fiche, atelier);
+    else if (outcome === 'unrepaired') msg = unrepairedMessage(fiche, atelier);
+    else if (outcome === 'reminder') msg = reminderMessage(fiche, atelier);
 
-    if (outcome === 'reminder') {
-      const msg = reminderMessage({
-        clientNom: fiche.client_nom,
-        appareil: fiche.appareil,
-        prix: fiche.prix_estime,
-        avance: fiche.avance_payee,
-        statut: fiche.statut,
-        atelier,
-      });
-      if (channel === 'whatsapp') {
-        await openWhatsApp(fiche.client_tel, msg, atelier.indicatif);
-      } else if (channel === 'sms') {
-        await openSms(fiche.client_tel, msg);
-      }
-      showToast({
-        title: 'Relance préparée',
-        message: `Message prêt pour ${fiche.client_nom}`,
-        type: 'info',
-      });
-      return;
-    }
-
-    const targetStatut = outcome === 'non_repare' ? 'non_repare' : 'pret';
-    const message =
-      outcome === 'non_repare'
-        ? unrepairedMessage({
-            clientNom: fiche.client_nom,
-            appareil: fiche.appareil,
-            atelier,
-          })
-        : readyMessage({
-            clientNom: fiche.client_nom,
-            appareil: fiche.appareil,
-            prix: fiche.prix_estime,
-            avance: fiche.avance_payee,
-            atelier,
-          });
-
-    let opened = true;
     if (channel === 'whatsapp') {
-      opened = await openWhatsApp(fiche.client_tel, message, atelier.indicatif);
-    } else if (channel === 'sms') {
-      opened = await openSms(fiche.client_tel, message);
-    }
-
-    if (opened && fiche.statut !== targetStatut) {
-      setBusyId(fiche.id);
-      try {
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        const updated = await updateRepairStatus(fiche.id, targetStatut);
-        onUpdated(updated);
-        showToast({
-          title:
-            targetStatut === 'non_repare'
-              ? 'Statut : Non réparé'
-              : 'Statut : Réparé / Prêt',
-          message: `${fiche.appareil} mis à jour.`,
-          type: targetStatut === 'non_repare' ? 'warning' : 'success',
-        });
-      } catch {
-        // Message already opened
-      } finally {
-        setBusyId(null);
-      }
+      const defaultDial = digitsOnly(atelier?.indicatif) || '225';
+      openWhatsApp(fiche.client_tel, msg, defaultDial);
+    } else {
+      openSms(fiche.client_tel, msg);
     }
   };
 
   const openEditModal = (fiche) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     const defaultDial = digitsOnly(atelier?.indicatif) || '225';
     setEditModal({
       id: fiche.id,
@@ -218,10 +164,7 @@ export default function RepairsListScreen({
       !editModal.appareil.trim() ||
       !editModal.probleme.trim()
     ) {
-      Alert.alert(
-        'Infos manquantes',
-        'Remplis le nom du client, son numéro, l’appareil et la panne.'
-      );
+      Alert.alert('Champs requis', 'Remplis le nom du client, son numéro, l’appareil et la panne.');
       return;
     }
 
@@ -234,10 +177,7 @@ export default function RepairsListScreen({
 
       let finalPhotoUrl = editModal.photoUri;
       if (editModal.photoUri && editModal.photoUri !== editModal.originalPhotoUri) {
-        finalPhotoUrl = await persistPhotoUri(
-          editModal.photoUri,
-          digitsOnly(atelier.phone)
-        );
+        finalPhotoUrl = await persistPhotoUri(editModal.photoUri, digitsOnly(atelier.phone));
       }
 
       const patch = {
@@ -250,11 +190,8 @@ export default function RepairsListScreen({
         statut: editModal.statut,
         photo_url: finalPhotoUrl || null,
       };
-      if (editModal.statut === 'pret') {
-        patch.pret_le = new Date().toISOString();
-      } else if (editModal.statut === 'livre') {
-        patch.livre_le = new Date().toISOString();
-      }
+      if (editModal.statut === 'pret') patch.pret_le = new Date().toISOString();
+      else if (editModal.statut === 'livre') patch.livre_le = new Date().toISOString();
 
       let updated;
       try {
@@ -338,10 +275,7 @@ export default function RepairsListScreen({
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         onUpdated(updated);
         showToast({
-          title:
-            nextStatus === 'livre'
-              ? 'Appareil récupéré'
-              : 'Remis en atelier',
+          title: nextStatus === 'livre' ? 'Appareil récupéré' : 'Remis en atelier',
           message: `${fiche.appareil} (${fiche.client_nom})`,
           type: 'success',
         });
@@ -353,118 +287,130 @@ export default function RepairsListScreen({
     }
   };
 
-  const searchScale = scrollY.interpolate({
-    inputRange: [-40, 0, 90],
-    outputRange: [1.02, 1, 0.98],
-    extrapolate: 'clamp',
-  });
-
-  const canBulkDelete =
-    ['pret', 'non_repare', 'livre'].includes(filterStatus) && filtered.length > 0;
+  const canBulkDelete = ['pret', 'non_repare', 'livre'].includes(filterStatus) && filtered.length > 0;
 
   return (
     <View style={{ flex: 1 }}>
-      {/* HeroSearchField animé */}
-      <Animated.View style={{ transform: [{ scale: searchScale }] }}>
-        <HeroSearchField
-          value={query}
-          onChangeText={handleQueryChange}
-          placeholder="Chercher un client, numéro ou appareil..."
-        />
-      </Animated.View>
+      {/* 1. HERO SEARCH FIELD */}
+      <HeroSearchField
+        value={query}
+        onChangeText={setQuery}
+        placeholder="Rechercher client, téléphone ou modèle..."
+      />
 
       <Animated.ScrollView
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        scrollEventThrottle={16}
-        onScroll={Animated.event(
-          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-          { useNativeDriver: true }
-        )}
         refreshControl={<RefreshControl refreshing={false} onRefresh={onRefresh} />}
       >
-        {/* Bandeau Atelier de Réparation Animé */}
-        <WorkshopLiveBanner stats={stats} />
+        {/* 2. STAT SUMMARY CARD (HeroUI Metric Strip) */}
+        <HeroCard style={styles.metricCard}>
+          <HeroCard.Body style={styles.metricBody}>
+            <View style={styles.metricCol}>
+              <Text style={[styles.metricLabel, { color: theme.muted }]}>En cours</Text>
+              <Text style={[styles.metricValue, { color: theme.accent }]}>
+                {stats.enCours}
+              </Text>
+            </View>
+            <View style={[styles.metricDivider, { backgroundColor: theme.border }]} />
+            <View style={styles.metricCol}>
+              <Text style={[styles.metricLabel, { color: theme.muted }]}>Prêts</Text>
+              <Text style={[styles.metricValue, { color: theme.whatsapp }]}>
+                {stats.prets}
+              </Text>
+            </View>
+            <View style={[styles.metricDivider, { backgroundColor: theme.border }]} />
+            <View style={styles.metricCol}>
+              <Text style={[styles.metricLabel, { color: theme.muted }]}>Total atelier</Text>
+              <Text style={[styles.metricValue, { color: theme.text }]}>
+                {stats.actifs}
+              </Text>
+            </View>
+          </HeroCard.Body>
+        </HeroCard>
 
-        {/* Interactive Status Filter Pills */}
+        {/* 3. HERO FILTER CHIPS */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.statsRow}
+          contentContainerStyle={styles.filterScroll}
         >
-          <StatPill
-            icon="layers-outline"
-            label="En atelier"
-            count={stats.actifs}
-            active={filterStatus === 'all'}
-            color={isDark ? '#338EF7' : '#0F172A'}
-            onPress={() => handleFilterChange('all')}
-          />
-          <StatPill
-            icon="construct-outline"
-            label="Sur le banc"
-            count={stats.enCours}
-            active={filterStatus === 'en_cours'}
-            color={theme.accent}
-            onPress={() => handleFilterChange('en_cours')}
-          />
-          <StatPill
-            icon="checkmark-done-circle-outline"
-            label="Réparés (Prêts)"
-            count={stats.prets}
-            active={filterStatus === 'pret'}
-            color={theme.whatsapp}
-            onPress={() => handleFilterChange('pret')}
-          />
-          <StatPill
-            icon="close-circle-outline"
-            label="Non réparés"
-            count={stats.nonRepares}
-            active={filterStatus === 'non_repare'}
-            color={theme.danger}
-            onPress={() => handleFilterChange('non_repare')}
-          />
-          <StatPill
-            icon="bag-check-outline"
-            label="Récupérés"
-            count={stats.livres}
-            active={filterStatus === 'livre'}
-            color={theme.muted}
-            onPress={() => handleFilterChange('livre')}
-          />
+          <Pressable onPress={() => handleFilterChange('all')}>
+            <HeroChip
+              label={`Tous (${stats.actifs})`}
+              variant={filterStatus === 'all' ? 'solid' : 'flat'}
+              color={theme.accent}
+              size="md"
+              style={styles.filterChipItem}
+            />
+          </Pressable>
+
+          <Pressable onPress={() => handleFilterChange('en_cours')}>
+            <HeroChip
+              icon="construct"
+              label={`En cours (${stats.enCours})`}
+              variant={filterStatus === 'en_cours' ? 'solid' : 'flat'}
+              color={theme.accent}
+              size="md"
+              style={styles.filterChipItem}
+            />
+          </Pressable>
+
+          <Pressable onPress={() => handleFilterChange('pret')}>
+            <HeroChip
+              icon="checkmark-circle"
+              label={`Prêts (${stats.prets})`}
+              variant={filterStatus === 'pret' ? 'solid' : 'flat'}
+              color={theme.whatsapp}
+              size="md"
+              style={styles.filterChipItem}
+            />
+          </Pressable>
+
+          <Pressable onPress={() => handleFilterChange('non_repare')}>
+            <HeroChip
+              icon="close-circle"
+              label={`Non réparés (${stats.nonRepares})`}
+              variant={filterStatus === 'non_repare' ? 'solid' : 'flat'}
+              color={theme.danger}
+              size="md"
+              style={styles.filterChipItem}
+            />
+          </Pressable>
+
+          <Pressable onPress={() => handleFilterChange('livre')}>
+            <HeroChip
+              icon="bag-check"
+              label={`Récupérés (${stats.livres})`}
+              variant={filterStatus === 'livre' ? 'solid' : 'flat'}
+              color={theme.muted}
+              size="md"
+              style={styles.filterChipItem}
+            />
+          </Pressable>
         </ScrollView>
 
         {canBulkDelete ? (
-          <Pressable
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-              setConfirmModal({
-                type: 'delete_many',
-                ids: filtered.map((f) => f.id),
-                label:
-                  filterStatus === 'pret'
-                    ? `les ${filtered.length} appareil(s) déjà réparés`
-                    : filterStatus === 'non_repare'
-                    ? `les ${filtered.length} appareil(s) non réparés`
-                    : `les ${filtered.length} appareil(s) récupérés`,
-              });
-            }}
-            style={[
-              styles.bulkDeleteBar,
-              {
-                backgroundColor: theme.dangerSoft,
-                borderColor: `${theme.danger}44`,
-              },
-            ]}
-          >
-            <Ionicons name="trash-outline" size={16} color={theme.danger} />
-            <Text style={[styles.bulkDeleteText, { color: theme.danger }]}>
-              Tout supprimer dans cet onglet ({filtered.length})
-            </Text>
-          </Pressable>
+          <View style={{ marginHorizontal: 16, marginBottom: 14 }}>
+            <Button
+              size="sm"
+              variant="danger-soft"
+              icon="trash-outline"
+              title={`Tout supprimer dans cet onglet (${filtered.length})`}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+                setConfirmModal({
+                  type: 'delete_many',
+                  ids: filtered.map((f) => f.id),
+                  label: `${filtered.length} appareil(s)`,
+                });
+              }}
+            />
+          </View>
         ) : null}
 
+        {/* 4. REPAIR CARDS LIST */}
         {loading && repairs.length === 0 ? (
           <>
             <RepairCardSkeleton />
@@ -472,68 +418,46 @@ export default function RepairsListScreen({
             <RepairCardSkeleton />
           </>
         ) : error ? (
-          <View style={styles.empty}>
-            <Ionicons name="cloud-offline-outline" size={44} color={theme.danger} />
-            <Text style={[styles.emptyTitle, { color: theme.text }]}>
-              Chargement impossible
-            </Text>
-            <Text style={[styles.emptyText, { color: theme.muted }]}>{error}</Text>
-            <Pressable
-              onPress={onRefresh}
-              style={[styles.retry, { backgroundColor: theme.accent }]}
-            >
-              <Text style={styles.retryText}>Réessayer</Text>
-            </Pressable>
-          </View>
+          <HeroAlert
+            variant="danger"
+            title="Connexion impossible"
+            description={error}
+            style={{ marginHorizontal: 16 }}
+          />
         ) : filtered.length === 0 ? (
-          <View style={styles.empty}>
-            <View
-              style={[styles.emptyIconCircle, { backgroundColor: theme.accentSoft }]}
-            >
-              <Ionicons
-                name={query ? 'search-outline' : 'construct-outline'}
-                size={34}
-                color={theme.accent}
-              />
-            </View>
+          <HeroSurface style={styles.emptySurface}>
+            <Ionicons
+              name={query ? 'search-outline' : 'construct-outline'}
+              size={36}
+              color={theme.muted}
+            />
             <Text style={[styles.emptyTitle, { color: theme.text }]}>
-              {query ? 'Aucun appareil trouvé' : 'Aucun appareil dans cette liste'}
+              {query ? 'Aucun résultat' : 'Aucun appareil dans cette liste'}
             </Text>
-            <Text style={[styles.emptyText, { color: theme.muted }]}>
+            <Text style={[styles.emptyDesc, { color: theme.muted }]}>
               {query
-                ? 'Essaie avec un autre nom, numéro ou modèle.'
-                : 'Touche l’onglet « Nouveau dépôt » pour enregistrer un téléphone, PC, TV ou autre appareil.'}
+                ? 'Vérifie l’orthographe du client ou de l’appareil.'
+                : 'Passe à l’onglet « Nouveau dépôt » pour enregistrer une nouvelle fiche.'}
             </Text>
-          </View>
+          </HeroSurface>
         ) : (
-          filtered.map((fiche, idx) => (
+          filtered.map((fiche) => (
             <RepairCard
               key={fiche.id}
               fiche={fiche}
-              index={idx}
               busy={busyId === fiche.id}
               onWhatsApp={() => setNotifyModal({ fiche, mode: 'whatsapp' })}
               onSms={() => setNotifyModal({ fiche, mode: 'sms' })}
-              onEdit={(f) => openEditModal(f)}
-              onDelete={(f) =>
-                setConfirmModal({
-                  type: 'delete_one',
-                  fiche: f,
-                })
-              }
-              onDelivered={(f) =>
-                setConfirmModal({
-                  type: 'delivered',
-                  fiche: f,
-                })
-              }
+              onEdit={openEditModal}
+              onDelete={(f) => setConfirmModal({ type: 'delete_one', fiche: f })}
+              onDelivered={(f) => setConfirmModal({ type: 'delivered', fiche: f })}
             />
           ))
         )}
       </Animated.ScrollView>
 
       {/* =====================================================================
-          1. HERO BOTTOM SHEET : CHOIX PROPRE / PRÊT (RÉPARÉ) OU NON RÉPARÉ
+          5. HERO BOTTOM SHEET : CHOIX PROPRE / PRÊT (RÉPARÉ) OU NON RÉPARÉ
          ===================================================================== */}
       <HeroBottomSheet
         visible={!!notifyModal}
@@ -541,1270 +465,445 @@ export default function RepairsListScreen({
         maxWidth={480}
       >
         {notifyModal ? (
-          <>
-            <LinearGradient
-              colors={
-                notifyModal.mode === 'whatsapp'
-                  ? ['#17C964', '#12A150']
-                  : notifyModal.mode === 'sms'
-                  ? ['#006FEE', '#004493']
-                  : notifyModal.mode === 'reminder'
-                  ? ['#F5A524', '#B45309']
-                  : ['#F31260', '#991B1B']
-              }
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.choiceHeader}
-            >
-              <View style={styles.choiceHeaderIcon}>
-                <Ionicons
-                  name={
-                    notifyModal.mode === 'whatsapp'
-                      ? 'logo-whatsapp'
-                      : notifyModal.mode === 'sms'
-                      ? 'chatbubble-ellipses'
-                      : notifyModal.mode === 'reminder'
-                      ? 'notifications'
-                      : 'close-circle'
-                  }
-                  size={26}
-                  color="#FFFFFF"
-                />
-              </View>
+          <View style={styles.sheetWrap}>
+            <View style={styles.sheetHeader}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.choiceBadgeText}>
-                  {notifyModal.mode === 'whatsapp'
-                    ? 'RAPELO · MESSAGE WHATSAPP'
-                    : notifyModal.mode === 'sms'
-                    ? 'RAPELO · SMS DIRECT'
-                    : notifyModal.mode === 'reminder'
-                    ? 'RAPELO · RELANCE CLIENT'
-                    : 'RAPELO · APPAREIL NON RÉPARÉ'}
+                <Text style={[styles.sheetTitle, { color: theme.text }]}>
+                  {notifyModal.mode === 'whatsapp' ? 'Message WhatsApp' : 'SMS Direct'}
                 </Text>
-                <Text style={styles.choiceClientName} numberOfLines={1}>
-                  {notifyModal.fiche.client_nom}
-                </Text>
-                <Text style={styles.choiceDeviceSub} numberOfLines={1}>
-                  {notifyModal.fiche.appareil} · {notifyModal.fiche.client_tel}
+                <Text style={[styles.sheetSub, { color: theme.muted }]}>
+                  {notifyModal.fiche.appareil} · {notifyModal.fiche.client_nom}
                 </Text>
               </View>
               <HeroCloseButton
-                variant="overlay"
-                size="md"
-                accessibilityLabel="Fermer l'envoi de message"
+                size="sm"
+                variant="default"
                 onPress={() => setNotifyModal(null)}
-                style={{ marginLeft: 8 }}
               />
-            </LinearGradient>
+            </View>
 
-            <ScrollView
-              contentContainerStyle={styles.choiceBody}
-              showsVerticalScrollIndicator={false}
-            >
-              {notifyModal.mode === 'reminder' ? (
-                <>
-                  <Text style={[styles.choiceQuestion, { color: theme.text }]}>
-                    Relancer {notifyModal.fiche.client_nom} pour qu'il vienne récupérer son{' '}
-                    {notifyModal.fiche.appareil} :
-                  </Text>
+            <HeroSeparator />
 
-                  <View
-                    style={[
-                      styles.outcomeCard,
-                      {
-                        backgroundColor: theme.warningSoft,
-                        borderColor: theme.warning,
-                      },
-                    ]}
-                  >
-                    <View style={styles.outcomeTopRow}>
-                      <View
-                        style={[
-                          styles.outcomeIconWrap,
-                          { backgroundColor: `${theme.warning}25` },
-                        ]}
-                      >
-                        <Ionicons name="notifications" size={24} color={theme.warningDark} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.outcomeTitle, { color: theme.warningDark }]}>
-                          Rappel · Appareil non récupéré
-                        </Text>
-                        <Text style={[styles.outcomePreview, { color: theme.textSecondary }]}>
-                          «{' '}
-                          {reminderMessage({
-                            clientNom: notifyModal.fiche.client_nom,
-                            appareil: notifyModal.fiche.appareil,
-                            prix: notifyModal.fiche.prix_estime,
-                            avance: notifyModal.fiche.avance_payee,
-                            statut: notifyModal.fiche.statut,
-                            atelier,
-                          })}{' '}
-                          »
-                        </Text>
-                      </View>
-                    </View>
+            <ScrollView contentContainerStyle={styles.sheetScroll}>
+              <Text style={[styles.choiceHeading, { color: theme.textSecondary }]}>
+                Sélectionne le message à envoyer :
+              </Text>
 
-                    <View style={{ flexDirection: 'row', marginTop: 12 }}>
-                      <Button
-                        small
-                        title="WhatsApp"
-                        icon="logo-whatsapp"
-                        variant="whatsapp"
-                        feedbackVariant="scale-ripple"
-                        onPress={() =>
-                          handleSendOutcome(notifyModal.fiche, 'whatsapp', 'reminder')
-                        }
-                      />
-                      <View style={{ width: 10 }} />
-                      <Button
-                        small
-                        title="SMS Direct"
-                        icon="chatbubble-ellipses"
-                        variant="sms"
-                        feedbackVariant="scale-ripple"
-                        onPress={() =>
-                          handleSendOutcome(notifyModal.fiche, 'sms', 'reminder')
-                        }
-                      />
-                    </View>
-
-                    <Pressable
-                      onPress={() => {
-                        const tel = notifyModal.fiche.client_tel;
-                        setNotifyModal(null);
-                        callCustomer(tel);
-                      }}
-                      style={[
-                        styles.callDirectSheetBtn,
-                        {
-                          backgroundColor: theme.badgeGreen,
-                          borderColor: `${theme.success}44`,
-                        },
-                      ]}
-                    >
-                      <Ionicons name="call" size={16} color={theme.success} />
-                      <Text style={[styles.callDirectSheetText, { color: theme.success }]}>
-                        Appeler directement {notifyModal.fiche.client_nom} ({notifyModal.fiche.client_tel})
-                      </Text>
-                    </Pressable>
-                  </View>
-                </>
-              ) : (
-                <>
-                  <Text style={[styles.choiceQuestion, { color: theme.text }]}>
-                    Quel est le résultat pour l'appareil de {notifyModal.fiche.client_nom} ?
-                  </Text>
-
-                  {/* OPTION 1 : PROPRE / PRÊT (RÉPARÉ) */}
-                  <Pressable
-                    onPress={() =>
-                      handleSendOutcome(notifyModal.fiche, notifyModal.mode, 'pret')
-                    }
-                    style={({ pressed }) => [
-                      styles.outcomeCard,
-                      {
-                        backgroundColor: theme.badgeGreen,
-                        borderColor: theme.whatsapp,
-                      },
-                      pressed && { transform: [{ scale: 0.985 }] },
-                    ]}
-                  >
-                    <View style={styles.outcomeTopRow}>
-                      <View
-                        style={[
-                          styles.outcomeIconWrap,
-                          { backgroundColor: `${theme.whatsapp}28` },
-                        ]}
-                      >
-                        <Ionicons name="checkmark-done-circle" size={26} color={theme.success} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <View
-                          style={[
-                            styles.outcomePill,
-                            { backgroundColor: `${theme.whatsapp}25` },
-                          ]}
-                        >
-                          <Text style={[styles.outcomePillText, { color: theme.success }]}>
-                            OUI · PROPRE / RÉPARÉ (PRÊT)
-                          </Text>
-                        </View>
-                        <Text style={[styles.outcomeTitle, { color: theme.text }]}>
-                          L'appareil est prêt ! Venez le récupérer
-                        </Text>
-                        <Text style={[styles.outcomePreview, { color: theme.textSecondary }]}>
-                          « RAPELO — Bonjour {notifyModal.fiche.client_nom}, bonne nouvelle !
-                          Votre {notifyModal.fiche.appareil} est prêt (Reste à payer :{' '}
-                          {formatPrice(
-                            computeBalance(
-                              notifyModal.fiche.prix_estime,
-                              notifyModal.fiche.avance_payee
-                            ).reste
-                          )}
-                          ). »
-                        </Text>
-                      </View>
-                    </View>
-                    <View
-                      style={[
-                        styles.outcomeActionBtn,
-                        { backgroundColor: theme.whatsapp },
-                      ]}
-                    >
-                      <Ionicons
-                        name={
-                          notifyModal.mode === 'whatsapp'
-                            ? 'logo-whatsapp'
-                            : 'chatbubble-ellipses'
-                        }
-                        size={17}
-                        color="#FFFFFF"
-                      />
-                      <Text style={styles.outcomeActionBtnText}>
-                        Envoyer « Appareil Prêt » à {notifyModal.fiche.client_nom}
-                      </Text>
-                    </View>
-                  </Pressable>
-
-                  {/* OPTION 2 : NON RÉPARÉ (ÇA N'A PAS MARCHÉ — VENEZ CHERCHER) */}
-                  <Pressable
-                    onPress={() =>
-                      handleSendOutcome(
-                        notifyModal.fiche,
-                        notifyModal.mode,
-                        'non_repare'
-                      )
-                    }
-                    style={({ pressed }) => [
-                      styles.outcomeCard,
-                      {
-                        backgroundColor: theme.dangerSoft,
-                        borderColor: theme.danger,
-                      },
-                      pressed && { transform: [{ scale: 0.985 }] },
-                    ]}
-                  >
-                    <View style={styles.outcomeTopRow}>
-                      <View
-                        style={[
-                          styles.outcomeIconWrap,
-                          { backgroundColor: `${theme.danger}25` },
-                        ]}
-                      >
-                        <Ionicons name="close-circle" size={26} color={theme.danger} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <View
-                          style={[
-                            styles.outcomePill,
-                            { backgroundColor: `${theme.danger}22` },
-                          ]}
-                        >
-                          <Text style={[styles.outcomePillText, { color: theme.danger }]}>
-                            NON · ÇA N'A PAS MARCHÉ (NON RÉPARÉ)
-                          </Text>
-                        </View>
-                        <Text style={[styles.outcomeTitle, { color: theme.text }]}>
-                          Non réparé — Venez chercher votre appareil
-                        </Text>
-                        <Text style={[styles.outcomePreview, { color: theme.textSecondary }]}>
-                          « RAPELO — Bonjour {notifyModal.fiche.client_nom}, la réparation de
-                          votre {notifyModal.fiche.appareil} n'a pas pu aboutir. Venez le
-                          récupérer à l'atelier. »
-                        </Text>
-                      </View>
-                    </View>
-                    <View
-                      style={[
-                        styles.outcomeActionBtn,
-                        { backgroundColor: theme.danger },
-                      ]}
-                    >
-                      <Ionicons
-                        name={
-                          notifyModal.mode === 'whatsapp'
-                            ? 'logo-whatsapp'
-                            : 'chatbubble-ellipses'
-                        }
-                        size={17}
-                        color="#FFFFFF"
-                      />
-                      <Text style={styles.outcomeActionBtnText}>
-                        Envoyer « Venez chercher l'appareil »
-                      </Text>
-                    </View>
-                  </Pressable>
-
-                  {/* OPTION 3 : RELANCE RAPIDE */}
-                  <Pressable
-                    onPress={() =>
-                      handleSendOutcome(
-                        notifyModal.fiche,
-                        notifyModal.mode,
-                        'reminder'
-                      )
-                    }
-                    style={[
-                      styles.quickReminderRowBtn,
-                      {
-                        backgroundColor: theme.warningSoft,
-                        borderColor: `${theme.warning}66`,
-                      },
-                    ]}
-                  >
-                    <Ionicons name="notifications-outline" size={16} color={theme.warningDark} />
-                    <Text style={[styles.quickReminderRowText, { color: theme.warningDark }]}>
-                      Envoyer une relance (appareil toujours non récupéré)
-                    </Text>
-                  </Pressable>
-                </>
-              )}
-
+              {/* Option 1 : Appareil prêt */}
               <Pressable
-                onPress={() => setNotifyModal(null)}
-                style={[
-                  styles.cancelSheetBtn,
-                  { backgroundColor: theme.surface, borderColor: theme.border },
-                ]}
+                onPress={() => handleSendOutcome(notifyModal.fiche, notifyModal.mode, 'ready')}
+                style={[styles.messageOption, { backgroundColor: theme.surface, borderColor: theme.whatsapp }]}
               >
-                <Text style={[styles.cancelSheetText, { color: theme.textSecondary }]}>
-                  Fermer
-                </Text>
+                <View style={[styles.optionBadge, { backgroundColor: theme.whatsappSoft }]}>
+                  <Ionicons name="checkmark-circle" size={20} color={theme.whatsapp} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.optionTitle, { color: theme.whatsapp }]}>
+                    Appareil réparé et prêt
+                  </Text>
+                  <Text style={[styles.optionDesc, { color: theme.muted }]} numberOfLines={2}>
+                    Prévient le client que son appareil est réparé avec le solde à régler.
+                  </Text>
+                </View>
+                <Ionicons name="send" size={16} color={theme.whatsapp} />
               </Pressable>
+
+              {/* Option 2 : Non réparé */}
+              <Pressable
+                onPress={() => handleSendOutcome(notifyModal.fiche, notifyModal.mode, 'unrepaired')}
+                style={[styles.messageOption, { backgroundColor: theme.surface, borderColor: theme.danger }]}
+              >
+                <View style={[styles.optionBadge, { backgroundColor: theme.dangerSoft }]}>
+                  <Ionicons name="close-circle" size={20} color={theme.danger} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.optionTitle, { color: theme.danger }]}>
+                    Non réparable / À récupérer
+                  </Text>
+                  <Text style={[styles.optionDesc, { color: theme.muted }]} numberOfLines={2}>
+                    Informe le client qu’il peut venir chercher son appareil.
+                  </Text>
+                </View>
+                <Ionicons name="send" size={16} color={theme.danger} />
+              </Pressable>
+
+              {/* Option 3 : Relance */}
+              <Pressable
+                onPress={() => handleSendOutcome(notifyModal.fiche, notifyModal.mode, 'reminder')}
+                style={[styles.messageOption, { backgroundColor: theme.surface, borderColor: theme.warning }]}
+              >
+                <View style={[styles.optionBadge, { backgroundColor: theme.warningSoft }]}>
+                  <Ionicons name="notifications" size={20} color={theme.warning} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.optionTitle, { color: theme.warning }]}>
+                    Relance client
+                  </Text>
+                  <Text style={[styles.optionDesc, { color: theme.muted }]} numberOfLines={2}>
+                    Rappel amical pour inviter le client à passer à l’atelier.
+                  </Text>
+                </View>
+                <Ionicons name="send" size={16} color={theme.warning} />
+              </Pressable>
+
+              {/* Appel direct */}
+              <Button
+                size="sm"
+                variant="tertiary"
+                icon="call-outline"
+                title={`Appeler ${notifyModal.fiche.client_nom}`}
+                onPress={() => {
+                  const tel = notifyModal.fiche.client_tel;
+                  setNotifyModal(null);
+                  callCustomer(tel);
+                }}
+                style={{ marginTop: 8 }}
+              />
             </ScrollView>
-          </>
+          </View>
         ) : null}
       </HeroBottomSheet>
 
       {/* =====================================================================
-          2. HERO BOTTOM SHEET : MODIFIER LA FICHE DU CLIENT & DE L'APPAREIL
+          6. HERO BOTTOM SHEET : MODIFICATION DE FICHE CLIENT
          ===================================================================== */}
       <HeroBottomSheet
         visible={!!editModal}
         onClose={() => setEditModal(null)}
-        maxWidth={500}
+        maxWidth={520}
       >
-        <View
-          style={[
-            styles.editHeader,
-            { backgroundColor: theme.surface, borderBottomColor: theme.border },
-          ]}
-        >
-          <View style={styles.editHeaderLeft}>
-            <View
-              style={[styles.editHeaderBadge, { backgroundColor: theme.accentSoft }]}
-            >
-              <Ionicons name="create" size={18} color={theme.accent} />
-            </View>
-            <View>
-              <Text style={[styles.editHeaderTitle, { color: theme.text }]}>
-                Modifier la fiche client
-              </Text>
-              <Text style={[styles.editHeaderSub, { color: theme.muted }]}>
-                Modifie le client, l'appareil, le prix ou le statut
-              </Text>
-            </View>
-          </View>
-          <HeroCloseButton
-            variant="default"
-            size="md"
-            accessibilityLabel="Fermer la modification"
-            onPress={() => setEditModal(null)}
-          />
-        </View>
-
         {editModal ? (
-          <ScrollView
-            contentContainerStyle={styles.editScroll}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            <Text style={[styles.sectionLabel, { color: theme.muted }]}>
-              ÉTAT DE LA RÉPARATION
-            </Text>
-            <View style={styles.statusGrid}>
-              {STATUS_OPTIONS.map((st) => {
-                const active = editModal.statut === st.id;
-                return (
-                  <Pressable
-                    key={st.id}
-                    onPress={() =>
-                      setEditModal((m) => ({ ...m, statut: st.id }))
-                    }
-                    style={[
-                      styles.statusChoiceChip,
-                      {
-                        backgroundColor: active ? st.color : theme.surface,
-                        borderColor: active ? st.color : theme.border,
-                      },
-                    ]}
-                  >
-                    <Ionicons
-                      name={st.icon}
-                      size={15}
-                      color={active ? '#FFFFFF' : st.color}
-                    />
-                    <Text
-                      style={[
-                        styles.statusChoiceText,
-                        { color: active ? '#FFFFFF' : theme.text },
-                      ]}
-                    >
-                      {st.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            <PhotoPicker
-              uri={editModal.photoUri}
-              onChange={(uri) => setEditModal((m) => ({ ...m, photoUri: uri }))}
-            />
-
-            <Field
-              label="Nom du client"
-              icon="person-outline"
-              placeholder="Ex : Konan Yao"
-              value={editModal.clientNom}
-              onChangeText={(v) => setEditModal((m) => ({ ...m, clientNom: v }))}
-            />
-
-            <Text style={[styles.sectionLabel, { color: theme.muted }]}>
-              INDICATIF PAYS DU CLIENT
-            </Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: 10 }}
-            >
-              {COUNTRY_DIAL_CODES.map((c) => {
-                const active = editModal.dialCode === c.code;
-                return (
-                  <Pressable
-                    key={c.code}
-                    onPress={() =>
-                      setEditModal((m) => ({ ...m, dialCode: c.code }))
-                    }
-                    style={[
-                      styles.dialChip,
-                      {
-                        backgroundColor: active ? theme.whatsappSoft : theme.surface,
-                        borderColor: active ? theme.whatsappDark : theme.border,
-                      },
-                    ]}
-                  >
-                    <Text style={styles.dialFlag}>{c.flag}</Text>
-                    <Text
-                      style={[
-                        styles.dialText,
-                        {
-                          color: active
-                            ? theme.whatsappDark
-                            : theme.textSecondary,
-                        },
-                      ]}
-                    >
-                      +{c.code}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-
-            <Field
-              label="Numéro du client (WhatsApp / SMS)"
-              icon="call-outline"
-              placeholder="Ex : 07 07 07 07 07"
-              keyboardType="phone-pad"
-              value={editModal.clientTel}
-              onChangeText={(v) => setEditModal((m) => ({ ...m, clientTel: v }))}
-            />
-
-            <Field
-              label="Appareil (Marque & Modèle)"
-              icon="phone-portrait-outline"
-              placeholder="Ex : iPhone 13, PC HP, TV Samsung..."
-              value={editModal.appareil}
-              onChangeText={(v) => setEditModal((m) => ({ ...m, appareil: v }))}
-            />
-
-            <Field
-              label="Panne / Problème"
-              icon="construct-outline"
-              placeholder="Décris la panne..."
-              multiline
-              value={editModal.probleme}
-              onChangeText={(v) => setEditModal((m) => ({ ...m, probleme: v }))}
-            />
-
-            <Field
-              label="Montant total de la réparation (FCFA)"
-              icon="cash-outline"
-              rightSuffix="FCFA"
-              placeholder="Ex : 15000"
-              keyboardType="number-pad"
-              value={editModal.prix}
-              onChangeText={(v) =>
-                setEditModal((m) => ({ ...m, prix: digitsOnly(v) }))
-              }
-            />
-
-            <Field
-              label="Avance payée par le client (FCFA)"
-              icon="wallet-outline"
-              rightSuffix="FCFA"
-              placeholder="Ex : 5000"
-              keyboardType="number-pad"
-              value={editModal.avance}
-              onChangeText={(v) =>
-                setEditModal((m) => ({ ...m, avance: digitsOnly(v) }))
-              }
-            />
-
-            <View
-              style={[
-                styles.editBalanceRow,
-                { backgroundColor: theme.surface, borderColor: theme.border },
-              ]}
-            >
-              <Text style={[styles.editBalanceLabel, { color: theme.textSecondary }]}>
-                Reste à payer :
-              </Text>
-              <Text style={[styles.editBalanceValue, { color: theme.danger }]}>
-                {formatPrice(
-                  computeBalance(editModal.prix, editModal.avance).reste
-                )}
-              </Text>
-            </View>
-
-            <View style={styles.editFooterRow}>
-              <Button
-                title="Annuler"
-                variant="outline"
+          <View style={styles.sheetWrap}>
+            <View style={styles.sheetHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.sheetTitle, { color: theme.text }]}>
+                  Modifier la fiche
+                </Text>
+                <Text style={[styles.sheetSub, { color: theme.muted }]}>
+                  {editModal.appareil} · {editModal.clientNom}
+                </Text>
+              </View>
+              <HeroCloseButton
+                size="sm"
+                variant="default"
                 onPress={() => setEditModal(null)}
-                disabled={savingEdit}
-              />
-              <View style={{ width: 10 }} />
-              <Button
-                title="Enregistrer"
-                icon="checkmark-circle"
-                variant="primary"
-                loading={savingEdit}
-                onPress={saveEditedRepair}
               />
             </View>
-          </ScrollView>
+
+            <HeroSeparator />
+
+            <ScrollView contentContainerStyle={styles.sheetScroll} keyboardShouldPersistTaps="handled">
+              {/* Statut Selector */}
+              <Text style={[styles.inputSectionLabel, { color: theme.muted }]}>
+                STATUT ACTUEL :
+              </Text>
+              <View style={styles.statusChipsRow}>
+                {STATUS_OPTIONS.map((st) => {
+                  const active = editModal.statut === st.id;
+                  return (
+                    <Pressable
+                      key={st.id}
+                      onPress={() => setEditModal((m) => ({ ...m, statut: st.id }))}
+                    >
+                      <HeroChip
+                        icon={st.icon}
+                        label={st.label}
+                        color={st.color}
+                        variant={active ? 'solid' : 'flat'}
+                        size="md"
+                        style={styles.statusChipItem}
+                      />
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {/* Photo */}
+              <PhotoPicker
+                uri={editModal.photoUri}
+                onChange={(uri) => setEditModal((m) => ({ ...m, photoUri: uri }))}
+              />
+
+              {/* Form Fields */}
+              <Field
+                label="Nom du client"
+                icon="person-outline"
+                value={editModal.clientNom}
+                onChangeText={(v) => setEditModal((m) => ({ ...m, clientNom: v }))}
+              />
+
+              <Field
+                label="Téléphone du client"
+                icon="call-outline"
+                keyboardType="phone-pad"
+                value={editModal.clientTel}
+                onChangeText={(v) => setEditModal((m) => ({ ...m, clientTel: v }))}
+              />
+
+              <Field
+                label="Appareil (Modèle / Marque)"
+                icon="phone-portrait-outline"
+                value={editModal.appareil}
+                onChangeText={(v) => setEditModal((m) => ({ ...m, appareil: v }))}
+              />
+
+              <HeroTextArea
+                label="Panne / Problème constaté"
+                icon="construct-outline"
+                value={editModal.probleme}
+                onChangeText={(v) => setEditModal((m) => ({ ...m, probleme: v }))}
+              />
+
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <Field
+                  label="Prix total (FCFA)"
+                  icon="cash-outline"
+                  keyboardType="numeric"
+                  value={editModal.prix}
+                  onChangeText={(v) => setEditModal((m) => ({ ...m, prix: digitsOnly(v) }))}
+                  style={{ flex: 1 }}
+                />
+                <Field
+                  label="Avance payée (FCFA)"
+                  icon="wallet-outline"
+                  keyboardType="numeric"
+                  value={editModal.avance}
+                  onChangeText={(v) => setEditModal((m) => ({ ...m, avance: digitsOnly(v) }))}
+                  style={{ flex: 1 }}
+                />
+              </View>
+
+              <HeroSurface style={styles.balancePreview}>
+                <Text style={[styles.balancePreviewLabel, { color: theme.textSecondary }]}>
+                  Reste à payer :
+                </Text>
+                <Text style={[styles.balancePreviewVal, { color: theme.danger }]}>
+                  {formatPrice(computeBalance(editModal.prix, editModal.avance).reste)}
+                </Text>
+              </HeroSurface>
+
+              <View style={styles.editActions}>
+                <Button
+                  title="Annuler"
+                  variant="outline"
+                  onPress={() => setEditModal(null)}
+                  disabled={savingEdit}
+                />
+                <View style={{ width: 10 }} />
+                <Button
+                  title="Enregistrer"
+                  icon="checkmark-circle"
+                  variant="primary"
+                  loading={savingEdit}
+                  onPress={saveEditedRepair}
+                />
+              </View>
+            </ScrollView>
+          </View>
         ) : null}
       </HeroBottomSheet>
 
       {/* =====================================================================
-          3. MODAL DIALOG : CONFIRMATION DE SUPPRESSION OU DE RÉCUPÉRATION
+          7. HERO DIALOG : CONFIRMATIONS (SUPPRESSION OU RÉCUPÉRATION)
          ===================================================================== */}
-      <Modal
+      <HeroDialog
         visible={!!confirmModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setConfirmModal(null)}
+        onClose={() => setConfirmModal(null)}
+        icon={confirmModal?.type === 'delivered' ? 'checkmark-circle' : 'trash'}
+        iconColor={confirmModal?.type === 'delivered' ? theme.whatsapp : theme.danger}
+        iconBg={confirmModal?.type === 'delivered' ? theme.whatsappSoft : theme.dangerSoft}
+        title={
+          confirmModal?.type === 'delete_one'
+            ? 'Supprimer cette fiche ?'
+            : confirmModal?.type === 'delete_many'
+            ? 'Suppression groupée'
+            : confirmModal?.fiche?.statut === 'livre'
+            ? 'Remettre en atelier ?'
+            : 'Appareil récupéré ?'
+        }
+        description={
+          confirmModal?.type === 'delete_one'
+            ? `Supprimer définitivement la fiche de ${confirmModal?.fiche?.client_nom} (${confirmModal?.fiche?.appareil}) ?`
+            : confirmModal?.type === 'delete_many'
+            ? `Supprimer définitivement ${confirmModal?.label} ?`
+            : confirmModal?.fiche?.statut === 'livre'
+            ? `La fiche de ${confirmModal?.fiche?.client_nom} reviendra dans les appareils en cours.`
+            : `Confirmer que ${confirmModal?.fiche?.client_nom} a récupéré son ${confirmModal?.fiche?.appareil} ?`
+        }
       >
-        <Pressable style={styles.modalBackdrop} onPress={() => setConfirmModal(null)}>
-          <Pressable
-            style={[
-              styles.confirmCard,
-              { backgroundColor: theme.card, borderColor: theme.border },
-              shadow,
-            ]}
-            onPress={(e) => e.stopPropagation()}
-          >
-            {confirmModal ? (
-              <>
-                <HeroCloseButton
-                  variant="ghost"
-                  size="sm"
-                  accessibilityLabel="Annuler et fermer"
-                  onPress={() => setConfirmModal(null)}
-                  style={styles.confirmCloseBtn}
-                />
-                <View
-                  style={[
-                    styles.confirmIconCircle,
-                    confirmModal.type === 'delivered'
-                      ? { backgroundColor: theme.badgeGreen }
-                      : { backgroundColor: theme.dangerSoft },
-                  ]}
-                >
-                  <Ionicons
-                    name={
-                      confirmModal.type === 'delivered'
-                        ? 'checkmark-done-circle'
-                        : 'trash'
-                    }
-                    size={30}
-                    color={
-                      confirmModal.type === 'delivered'
-                        ? theme.success
-                        : theme.danger
-                    }
-                  />
-                </View>
-
-                <Text style={[styles.confirmTitle, { color: theme.text }]}>
-                  {confirmModal.type === 'delete_one'
-                    ? 'Supprimer cet appareil ?'
-                    : confirmModal.type === 'delete_many'
-                    ? 'Tout supprimer ?'
-                    : confirmModal.fiche?.statut === 'livre'
-                    ? 'Remettre cet appareil en atelier ?'
-                    : 'Appareil récupéré par le client ?'}
-                </Text>
-
-                <Text style={[styles.confirmMessage, { color: theme.textSecondary }]}>
-                  {confirmModal.type === 'delete_one'
-                    ? `Veux-tu supprimer définitivement la fiche de ${confirmModal.fiche?.client_nom} (${confirmModal.fiche?.appareil}) ?`
-                    : confirmModal.type === 'delete_many'
-                    ? `Veux-tu supprimer définitivement ${confirmModal.label} ?`
-                    : confirmModal.fiche?.statut === 'livre'
-                    ? `La fiche de ${confirmModal.fiche?.client_nom} (${confirmModal.fiche?.appareil}) reviendra dans les appareils en cours.`
-                    : `${confirmModal.fiche?.client_nom} a bien récupéré son ${confirmModal.fiche?.appareil} ? La fiche sera classée dans l'onglet « Récupérés ».`}
-                </Text>
-
-                <View style={styles.confirmBtnRow}>
-                  <Button
-                    size="sm"
-                    title="Annuler"
-                    variant="tertiary"
-                    onPress={() => setConfirmModal(null)}
-                  />
-                  <View style={{ width: 10 }} />
-                  <Button
-                    size="sm"
-                    variant={confirmModal.type === 'delivered' ? 'whatsapp' : 'danger'}
-                    feedbackVariant="scale-ripple"
-                    icon={
-                      confirmModal.type === 'delivered'
-                        ? 'checkmark-circle'
-                        : 'trash'
-                    }
-                    title={
-                      confirmModal.type === 'delivered'
-                        ? confirmModal.fiche?.statut === 'livre'
-                          ? 'Oui, remettre'
-                          : 'Oui, récupéré'
-                        : 'Oui, supprimer'
-                    }
-                    onPress={executeConfirmAction}
-                  />
-                </View>
-              </>
-            ) : null}
-          </Pressable>
-        </Pressable>
-      </Modal>
+        <View style={styles.dialogActions}>
+          <Button
+            size="sm"
+            title="Annuler"
+            variant="tertiary"
+            onPress={() => setConfirmModal(null)}
+          />
+          <View style={{ width: 10 }} />
+          <Button
+            size="sm"
+            variant={confirmModal?.type === 'delivered' ? 'whatsapp' : 'danger'}
+            title={
+              confirmModal?.type === 'delivered'
+                ? confirmModal?.fiche?.statut === 'livre'
+                  ? 'Remettre'
+                  : 'Oui, récupéré'
+                : 'Oui, supprimer'
+            }
+            onPress={executeConfirmAction}
+          />
+        </View>
+      </HeroDialog>
     </View>
   );
 }
 
-function WorkshopLiveBanner({ stats }) {
-  const { isDark } = useTheme();
-  const pulse = useRef(new Animated.Value(1)).current;
-  const toolRotateAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, {
-          toValue: 1.25,
-          duration: 850,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulse, {
-          toValue: 1,
-          duration: 850,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(toolRotateAnim, {
-          toValue: 1,
-          duration: 1400,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(toolRotateAnim, {
-          toValue: 0,
-          duration: 1400,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-  }, [pulse, toolRotateAnim]);
-
-  const rotate = toolRotateAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['-15deg', '15deg'],
-  });
-
-  const totalHandled = stats.actifs + stats.livres;
-  const doneCount = stats.prets + stats.livres;
-  const progressPct =
-    totalHandled > 0 ? Math.min(100, Math.round((doneCount / totalHandled) * 100)) : 0;
-
-  return (
-    <LinearGradient
-      colors={isDark ? ['#18181B', '#27272A'] : ['#0F172A', '#1E293B']}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={[
-        styles.workshopBanner,
-        isDark && { borderWidth: 1, borderColor: '#3F3F46' },
-      ]}
-    >
-      <View style={styles.workshopBannerTop}>
-        <Animated.View
-          style={[
-            styles.workshopBannerIcon,
-            stats.enCours > 0 && { transform: [{ rotate }] },
-          ]}
-        >
-          <Ionicons name="construct" size={20} color="#38BDF8" />
-        </Animated.View>
-
-        <View style={{ flex: 1 }}>
-          <View style={styles.workshopLiveTitleRow}>
-            <Animated.View
-              style={[
-                styles.workshopLiveDot,
-                {
-                  backgroundColor: stats.enCours > 0 ? '#38BDF8' : '#4ADE80',
-                  transform: [{ scale: pulse }],
-                },
-              ]}
-            />
-            <Text style={styles.workshopLiveTag}>
-              {stats.enCours > 0
-                ? 'BANC DE RÉPARATION EN ACTIVITÉ'
-                : 'ATELIER OPÉRATIONNEL · BANC PRÊT'}
-            </Text>
-          </View>
-          <Text style={styles.workshopBannerSub}>
-            {stats.enCours} sur le banc · {stats.prets} prêt(s) à livrer · {stats.livres} remis
-          </Text>
-        </View>
-
-        <View style={styles.workshopPctBadge}>
-          <Ionicons name="hardware-chip-outline" size={12} color="#38BDF8" />
-          <Text style={styles.workshopPctText}>{progressPct}%</Text>
-        </View>
-      </View>
-
-      <View style={styles.workshopBarTrack}>
-        <View style={[styles.workshopBarFill, { width: `${progressPct}%` }]} />
-      </View>
-    </LinearGradient>
-  );
-}
-
-function StatPill({ icon, label, count, active, color, onPress }) {
-  const { theme } = useTheme();
-  const scale = useRef(new Animated.Value(1)).current;
-  const bounce = (to) =>
-    Animated.spring(scale, {
-      toValue: to,
-      useNativeDriver: true,
-      speed: 30,
-      bounciness: 12,
-    }).start();
-
-  return (
-    <Animated.View style={{ marginRight: 8, transform: [{ scale }] }}>
-      <Pressable
-        onPress={onPress}
-        onPressIn={() => bounce(0.93)}
-        onPressOut={() => bounce(1)}
-        style={[
-          styles.statPill,
-          {
-            backgroundColor: active ? color : theme.card,
-            borderColor: active ? color : theme.border,
-          },
-          shadowSoft,
-        ]}
-      >
-        <View style={styles.statTopRow}>
-          {icon ? (
-            <Ionicons
-              name={icon}
-              size={14}
-              color={active ? '#FFFFFF' : color}
-              style={{ marginRight: 5 }}
-            />
-          ) : null}
-          <Text
-            style={[
-              styles.statCount,
-              { color: active ? '#FFFFFF' : theme.text },
-            ]}
-          >
-            {count}
-          </Text>
-        </View>
-        <Text
-          style={[
-            styles.statLabel,
-            { color: active ? 'rgba(255,255,255,0.92)' : theme.muted },
-          ]}
-          numberOfLines={1}
-        >
-          {label}
-        </Text>
-      </Pressable>
-    </Animated.View>
-  );
-}
-
 const styles = StyleSheet.create({
-  scroll: { padding: 16, paddingBottom: 48 },
-  workshopBanner: {
-    borderRadius: radius.lg,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+  scroll: {
+    paddingTop: 8,
+    paddingBottom: 36,
+  },
+  metricCard: {
+    marginHorizontal: 16,
     marginBottom: 12,
-    ...shadowSoft,
   },
-  workshopBannerTop: {
+  metricBody: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingVertical: 12,
   },
-  workshopBannerIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: 'rgba(56, 189, 248, 0.14)',
-    borderWidth: 1,
-    borderColor: 'rgba(56, 189, 248, 0.3)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 11,
-  },
-  workshopLiveTitleRow: {
-    flexDirection: 'row',
+  metricCol: {
+    flex: 1,
     alignItems: 'center',
   },
-  workshopLiveDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
+  metricDivider: {
+    width: 1,
+    height: 28,
+  },
+  metricLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  metricValue: {
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  filterScroll: {
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+    gap: 8,
+  },
+  filterChipItem: {
     marginRight: 6,
   },
-  workshopLiveTag: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: '#93C5FD',
-    letterSpacing: 0.6,
-  },
-  workshopBannerSub: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#E2E8F0',
-    marginTop: 2,
-  },
-  workshopPctBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 999,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    marginLeft: 8,
-  },
-  workshopPctText: {
-    fontSize: 11,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    marginLeft: 4,
-  },
-  workshopBarTrack: {
-    height: 5,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderRadius: 999,
-    marginTop: 10,
-    overflow: 'hidden',
-  },
-  workshopBarFill: {
-    height: '100%',
-    backgroundColor: '#38BDF8',
-    borderRadius: 999,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    paddingBottom: 14,
-  },
-  statPill: {
-    minWidth: 96,
-    borderRadius: radius.md,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    borderWidth: 1.5,
-  },
-  statTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  statCount: { fontSize: 17, fontWeight: '900' },
-  statLabel: { fontSize: 11, fontWeight: '700', marginTop: 2 },
-  bulkDeleteBar: {
-    flexDirection: 'row',
+  emptySurface: {
+    marginHorizontal: 16,
+    padding: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderRadius: radius.md,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    marginBottom: 14,
   },
-  bulkDeleteText: {
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  emptyDesc: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  sheetWrap: {
+    paddingBottom: 20,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    paddingTop: 8,
+  },
+  sheetTitle: {
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  sheetSub: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  sheetScroll: {
+    paddingHorizontal: 18,
+    paddingBottom: 20,
+  },
+  choiceHeading: {
     fontSize: 13,
     fontWeight: '800',
-    marginLeft: 6,
-  },
-  empty: { alignItems: 'center', marginTop: 46, paddingHorizontal: 24 },
-  emptyIconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
     marginBottom: 12,
   },
-  emptyTitle: { fontSize: 18, fontWeight: '800', marginTop: 4 },
-  emptyText: {
-    fontSize: 14,
-    marginTop: 6,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  retry: {
-    marginTop: 14,
-    paddingHorizontal: 22,
-    paddingVertical: 11,
-    borderRadius: radius.md,
-  },
-  retryText: { color: '#fff', fontWeight: '700' },
-
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(9, 9, 11, 0.74)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 16,
-  },
-
-  choiceHeader: {
+  messageOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-  },
-  choiceHeaderIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  choiceBadgeText: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: 'rgba(255,255,255,0.88)',
-    letterSpacing: 0.8,
-  },
-  choiceClientName: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    marginTop: 2,
-  },
-  choiceDeviceSub: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.9)',
-    marginTop: 1,
-  },
-  choiceCloseIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 8,
-  },
-  choiceBody: {
-    padding: 18,
-    paddingBottom: 26,
-  },
-  choiceQuestion: {
-    fontSize: 14,
-    fontWeight: '800',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  outcomeCard: {
-    borderRadius: radius.lg,
-    padding: 14,
-    marginBottom: 12,
-    borderWidth: 2,
-  },
-  callDirectSheetBtn: {
-    marginTop: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-  },
-  callDirectSheetText: {
-    fontSize: 12,
-    fontWeight: '800',
-    marginLeft: 6,
-  },
-  quickReminderRowBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
     borderWidth: 1.5,
     borderRadius: radius.md,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    padding: 12,
     marginBottom: 10,
   },
-  quickReminderRowText: {
-    fontSize: 12,
-    fontWeight: '800',
-    marginLeft: 6,
-  },
-  editBalanceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderWidth: 1.5,
-    borderRadius: radius.md,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginBottom: 12,
-  },
-  editBalanceLabel: {
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  editBalanceValue: {
-    fontSize: 15,
-    fontWeight: '900',
-  },
-  outcomeTopRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  outcomeIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 11,
-  },
-  outcomePill: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
-    marginBottom: 4,
-  },
-  outcomePillText: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 0.4,
-  },
-  outcomeTitle: {
-    fontSize: 15,
-    fontWeight: '900',
-  },
-  outcomePreview: {
-    fontSize: 12,
-    marginTop: 4,
-    lineHeight: 17,
-  },
-  outcomeActionBtn: {
-    marginTop: 12,
-    borderRadius: radius.sm,
-    paddingVertical: 11,
-    paddingHorizontal: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  outcomeActionBtnText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '800',
-    marginLeft: 7,
-  },
-  cancelSheetBtn: {
-    marginTop: 2,
-    paddingVertical: 11,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  cancelSheetText: {
-    fontSize: 14,
-    fontWeight: '800',
-  },
-
-  editHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-  },
-  editHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  editHeaderBadge: {
-    width: 38,
-    height: 38,
+  optionBadge: {
+    width: 36,
+    height: 36,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 10,
   },
-  editHeaderTitle: {
-    fontSize: 16,
-    fontWeight: '900',
+  optionTitle: {
+    fontSize: 14,
+    fontWeight: '800',
   },
-  editHeaderSub: {
-    fontSize: 12,
-    marginTop: 1,
+  optionDesc: {
+    fontSize: 11.5,
+    lineHeight: 16,
+    marginTop: 2,
   },
-  editCloseBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  editScroll: {
-    padding: 18,
-    paddingBottom: 28,
-  },
-  sectionLabel: {
+  inputSectionLabel: {
     fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 0.6,
+    fontWeight: '800',
+    letterSpacing: 0.5,
     marginBottom: 8,
   },
-  statusGrid: {
+  statusChipsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    gap: 6,
     marginBottom: 14,
   },
-  statusChoiceChip: {
+  statusChipItem: {
+    marginRight: 6,
+    marginBottom: 6,
+  },
+  balancePreview: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 11,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1.5,
-    marginRight: 8,
-    marginBottom: 8,
+    justifyContent: 'space-between',
+    padding: 12,
+    marginBottom: 14,
   },
-  statusChoiceText: {
-    fontSize: 12,
+  balancePreviewLabel: {
+    fontSize: 13,
     fontWeight: '800',
-    marginLeft: 5,
   },
-  dialChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderRadius: 999,
-    paddingHorizontal: 11,
-    paddingVertical: 6,
-    marginRight: 7,
-  },
-  dialFlag: { fontSize: 14, marginRight: 5 },
-  dialText: { fontSize: 12, fontWeight: '800' },
-  editFooterRow: {
-    flexDirection: 'row',
-    marginTop: 8,
-  },
-
-  confirmCard: {
-    width: '100%',
-    maxWidth: 400,
-    borderRadius: radius.xl,
-    borderWidth: 1,
-    padding: 22,
-    alignItems: 'center',
-  },
-  confirmCloseBtn: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    zIndex: 2,
-  },
-  confirmIconCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  confirmTitle: {
-    fontSize: 18,
+  balancePreviewVal: {
+    fontSize: 15,
     fontWeight: '900',
-    textAlign: 'center',
   },
-  confirmMessage: {
-    fontSize: 14,
-    textAlign: 'center',
-    marginTop: 8,
-    lineHeight: 20,
-    marginBottom: 18,
+  editActions: {
+    flexDirection: 'row',
+    marginTop: 6,
   },
-  confirmBtnRow: {
+  dialogActions: {
     flexDirection: 'row',
     width: '100%',
-  },
-  confirmBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  confirmBtnCancelText: {
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  confirmBtnActionText: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#FFFFFF',
+    marginTop: 6,
   },
 });

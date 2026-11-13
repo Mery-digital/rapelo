@@ -18,6 +18,7 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -133,7 +134,7 @@ export function HeroAvatar({
     return (
       <Pressable
         onPress={onPress}
-        onPressIn={() => bounce(0.94)}
+        onPressIn={() => bounce(0.92)}
         onPressOut={() => bounce(1)}
       >
         {inner}
@@ -144,90 +145,134 @@ export function HeroAvatar({
 }
 
 /* ============================================================================
-   2. HERO CHIP (Badge moderne flat / dot / bordered)
+   2. HERO CHIP (Badge capsule avec variante solid, bordered, flat)
    ============================================================================ */
 export function HeroChip({
   label,
   icon,
-  color = 'primary', // 'primary' | 'success' | 'danger' | 'warning' | 'neutral'
-  variant = 'flat', // 'flat' | 'solid' | 'dot'
+  color,
+  textColor,
+  variant = 'flat', // 'flat' | 'bordered' | 'solid'
   pulse = false,
-  animatedIcon = null,
+  toolRotate = false,
+  size = 'md', // 'sm' | 'md'
   style,
 }) {
   const { theme } = useTheme();
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const rotateAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (!pulse) return;
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.35,
-          duration: 850,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 850,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
+    if (pulse) {
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.25,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      loop.start();
+      return () => loop.stop();
+    }
   }, [pulse, pulseAnim]);
 
-  const palette = {
-    primary: { fg: theme.accent, bg: theme.badgeBlue, solid: theme.accent },
-    success: { fg: theme.success, bg: theme.badgeGreen, solid: theme.whatsapp },
-    danger: { fg: theme.danger, bg: theme.badgeRed, solid: theme.danger },
-    warning: { fg: theme.warningDark, bg: theme.badgeAmber, solid: theme.warning },
-    neutral: {
-      fg: theme.textSecondary,
-      bg: theme.chipNeutralBg,
-      solid: theme.textSecondary,
-    },
-  }[color] || { fg: theme.accent, bg: theme.badgeBlue, solid: theme.accent };
+  useEffect(() => {
+    if (toolRotate) {
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(rotateAnim, {
+            toValue: 1,
+            duration: 900,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(rotateAnim, {
+            toValue: -1,
+            duration: 900,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      loop.start();
+      return () => loop.stop();
+    }
+  }, [toolRotate, rotateAnim]);
 
-  const isSolid = variant === 'solid';
-  const textColor = isSolid ? '#FFFFFF' : palette.fg;
+  const spin = rotateAnim.interpolate({
+    inputRange: [-1, 1],
+    outputRange: ['-14deg', '14deg'],
+  });
+
+  const baseColor = color || theme.accent;
+
+  let bg = `${baseColor}1F`;
+  let border = 'transparent';
+  let fg = textColor || baseColor;
+
+  if (variant === 'solid') {
+    bg = baseColor;
+    border = baseColor;
+    fg = '#FFFFFF';
+  } else if (variant === 'bordered') {
+    bg = 'transparent';
+    border = baseColor;
+    fg = textColor || baseColor;
+  }
+
+  const isSmall = size === 'sm';
 
   return (
     <View
       style={[
         styles.chip,
         {
-          backgroundColor: isSolid ? palette.solid : palette.bg,
-          borderColor: isSolid ? palette.solid : `${palette.fg}25`,
+          backgroundColor: bg,
+          borderColor: border,
+          paddingHorizontal: isSmall ? 8 : 10,
+          paddingVertical: isSmall ? 3 : 5,
         },
         style,
       ]}
     >
-      {variant === 'dot' || pulse ? (
+      {pulse ? (
         <Animated.View
           style={[
             styles.chipDot,
             {
-              backgroundColor: textColor,
-              transform: [{ scale: pulse ? pulseAnim : 1 }],
+              backgroundColor: baseColor,
+              transform: [{ scale: pulseAnim }],
             },
           ]}
         />
       ) : null}
 
       {icon ? (
-        <Animated.View style={animatedIcon || undefined}>
+        <Animated.View
+          style={toolRotate ? { transform: [{ rotate: spin }] } : undefined}
+        >
           <Ionicons
             name={icon}
-            size={13}
-            color={textColor}
-            style={{ marginRight: 5 }}
+            size={isSmall ? 11 : 13}
+            color={fg}
+            style={{ marginRight: 4 }}
           />
         </Animated.View>
       ) : null}
 
-      <Text style={[styles.chipText, { color: textColor }]} numberOfLines={1}>
+      <Text
+        style={[
+          styles.chipText,
+          { color: fg, fontSize: isSmall ? 10 : 11.5 },
+        ]}
+      >
         {label}
       </Text>
     </View>
@@ -235,79 +280,92 @@ export function HeroChip({
 }
 
 /* ============================================================================
-   3. HERO SWITCH (Interrupteur Jour / Nuit animé)
+   3. HERO SWITCH (Interrupteur avec animation de glissement)
    ============================================================================ */
-export function HeroSwitch({ value, onValueChange, activeColor }) {
+export function HeroSwitch({
+  value,
+  onValueChange,
+  thumbIconOn = 'moon',
+  thumbIconOff = 'sunny',
+  color,
+}) {
   const { theme } = useTheme();
-  const anim = useRef(new Animated.Value(value ? 1 : 0)).current;
+  const activeColor = color || theme.accent;
+  const translateX = useRef(new Animated.Value(value ? 22 : 2)).current;
 
   useEffect(() => {
-    Animated.spring(anim, {
-      toValue: value ? 1 : 0,
-      useNativeDriver: false,
-      speed: 24,
-      bounciness: 10,
+    Animated.spring(translateX, {
+      toValue: value ? 22 : 2,
+      useNativeDriver: true,
+      speed: 26,
+      bounciness: 9,
     }).start();
-  }, [value, anim]);
+  }, [value, translateX]);
 
-  const translateX = anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [3, 25],
-  });
-
-  const trackBg = anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [theme.border, activeColor || theme.accent],
-  });
+  const toggle = () => {
+    Haptics.selectionAsync().catch(() => {});
+    onValueChange?.(!value);
+  };
 
   return (
     <Pressable
-      onPress={() => {
-        Haptics.selectionAsync().catch(() => {});
-        onValueChange?.(!value);
-      }}
-      hitSlop={8}
+      onPress={toggle}
+      accessibilityRole="switch"
+      accessibilityState={{ checked: value }}
+      style={[
+        styles.switchTrack,
+        {
+          backgroundColor: value ? activeColor : theme.border,
+        },
+      ]}
     >
-      <Animated.View style={[styles.switchTrack, { backgroundColor: trackBg }]}>
-        <Animated.View
-          style={[styles.switchThumb, { transform: [{ translateX }] }]}
-        >
-          <Ionicons
-            name={value ? 'moon' : 'sunny'}
-            size={12}
-            color={value ? theme.accent : '#F59E0B'}
-          />
-        </Animated.View>
+      <Animated.View
+        style={[
+          styles.switchThumb,
+          {
+            transform: [{ translateX }],
+          },
+        ]}
+      >
+        <Ionicons
+          name={value ? thumbIconOn : thumbIconOff}
+          size={12}
+          color={value ? activeColor : '#F59E0B'}
+        />
       </Animated.View>
     </Pressable>
   );
 }
 
 /* ============================================================================
-   4. HERO TABS (Curseur glissant animé style HeroUI)
+   4. HERO TABS (Onglets avec curseur fluide animé)
    ============================================================================ */
-export function HeroTabs({ items, activeKey, onChange }) {
+export function HeroTabs({ items = [], activeKey, onChange }) {
   const { theme } = useTheme();
   const [containerWidth, setContainerWidth] = useState(0);
-  const activeIdx = Math.max(
-    0,
-    items.findIndex((i) => i.key === activeKey)
-  );
   const pillX = useRef(new Animated.Value(0)).current;
+
+  const activeIndex = Math.max(
+    0,
+    items.findIndex((it) => it.key === activeKey)
+  );
 
   const padding = 5;
   const tabWidth =
-    containerWidth > 0 ? (containerWidth - padding * 2) / items.length : 0;
+    containerWidth > 0 && items.length > 0
+      ? (containerWidth - padding * 2) / items.length
+      : 0;
 
   useEffect(() => {
-    if (tabWidth <= 0) return;
-    Animated.spring(pillX, {
-      toValue: activeIdx * tabWidth,
-      useNativeDriver: true,
-      speed: 24,
-      bounciness: 9,
-    }).start();
-  }, [activeIdx, tabWidth, pillX]);
+    if (tabWidth > 0) {
+      Animated.spring(pillX, {
+        toValue: activeIndex * tabWidth,
+        useNativeDriver: true,
+        speed: 26,
+        bounciness: 8,
+      }).start();
+    }
+  }, [activeIndex, tabWidth, pillX]);
 
   return (
     <View
@@ -371,7 +429,7 @@ export function HeroTabs({ items, activeKey, onChange }) {
 }
 
 /* ============================================================================
-   5. HERO SEARCH FIELD (Champ de recherche animé au focus)
+   5. HERO SEARCH FIELD (Champ de recherche avec clear button)
    ============================================================================ */
 export function HeroSearchField({ value, onChangeText, placeholder }) {
   const { theme } = useTheme();
@@ -427,7 +485,7 @@ export function HeroSearchField({ value, onChangeText, placeholder }) {
 }
 
 /* ============================================================================
-   6. HERO BOTTOM SHEET (Panneau glissant depuis le bas avec poignée HeroUI)
+   6. HERO BOTTOM SHEET (Panneau glissant avec poignée HeroUI)
    ============================================================================ */
 export function HeroBottomSheet({
   visible,
@@ -506,7 +564,7 @@ export function HeroBottomSheet({
 }
 
 /* ============================================================================
-   7. HERO SKELETON (Aperçu de chargement animé style HeroUI)
+   7. HERO SKELETON (Chargement animé shimmer HeroUI)
    ============================================================================ */
 export function HeroSkeleton({ width = '100%', height = 16, borderRadius = 8, style }) {
   const { theme, isDark } = useTheme();
@@ -560,26 +618,21 @@ export function RepairCardSkeleton() {
       ]}
     >
       <View style={styles.skeletonTop}>
-        <HeroSkeleton width={56} height={56} borderRadius={18} />
-        <View style={{ flex: 1, marginLeft: 12 }}>
-          <HeroSkeleton width="60%" height={18} borderRadius={6} />
+        <HeroSkeleton width={52} height={52} borderRadius={18} />
+        <View style={{ flex: 1, marginLeft: 14 }}>
+          <HeroSkeleton width="60%" height={16} borderRadius={6} />
           <HeroSkeleton
-            width="42%"
-            height={13}
-            borderRadius={6}
-            style={{ marginTop: 8 }}
-          />
-          <HeroSkeleton
-            width="52%"
-            height={22}
-            borderRadius={11}
-            style={{ marginTop: 8 }}
+            width="40%"
+            height={12}
+            borderRadius={5}
+            style={{ marginTop: 7 }}
           />
         </View>
+        <HeroSkeleton width={74} height={26} borderRadius={999} />
       </View>
       <HeroSkeleton
         width="100%"
-        height={34}
+        height={38}
         borderRadius={10}
         style={{ marginTop: 14 }}
       />
@@ -603,7 +656,7 @@ export function RepairCardSkeleton() {
 }
 
 /* ============================================================================
-   8. HERO TOAST (Notifications flottantes en haut de l'écran)
+   8. HERO TOAST (Notifications flottantes)
    ============================================================================ */
 const ToastContext = createContext({
   showToast: () => {},
@@ -657,14 +710,28 @@ export function ToastProvider({ children }) {
     [translateY, opacity, hideToast]
   );
 
-  const tone =
-    toast?.type === 'danger'
-      ? { color: theme.danger, bg: theme.dangerSoft, icon: 'alert-circle' }
-      : toast?.type === 'warning'
-      ? { color: theme.warning, bg: theme.warningSoft, icon: 'notifications' }
-      : toast?.type === 'info'
-      ? { color: theme.accent, bg: theme.accentSoft, icon: 'information-circle' }
-      : { color: theme.success, bg: theme.badgeGreen, icon: 'checkmark-circle' };
+  const TONES = {
+    success: {
+      color: theme.success,
+      bg: theme.badgeGreen,
+      border: theme.whatsappSoft,
+      icon: 'checkmark-circle',
+    },
+    error: {
+      color: theme.danger,
+      bg: theme.dangerSoft,
+      border: theme.dangerSoft,
+      icon: 'alert-circle',
+    },
+    info: {
+      color: theme.accent,
+      bg: theme.accentSoft,
+      border: theme.accentSoft,
+      icon: 'information-circle',
+    },
+  };
+
+  const tone = toast ? TONES[toast.type] || TONES.success : TONES.success;
 
   return (
     <ToastContext.Provider value={{ showToast }}>
@@ -676,7 +743,10 @@ export function ToastProvider({ children }) {
             pointerEvents="box-none"
             style={[
               styles.toastPortal,
-              { opacity, transform: [{ translateY }] },
+              {
+                opacity,
+                transform: [{ translateY }],
+              },
             ]}
           >
             <Pressable
@@ -685,7 +755,7 @@ export function ToastProvider({ children }) {
                 styles.toastCard,
                 {
                   backgroundColor: theme.card,
-                  borderColor: `${tone.color}55`,
+                  borderColor: tone.color,
                 },
                 shadow,
               ]}
@@ -822,6 +892,249 @@ export function HeroCloseButton({
   );
 }
 
+/* ============================================================================
+   10. HERO CARD (Composant Card HeroUI avec sections Header, Body, Footer)
+   ============================================================================ */
+export function HeroCard({ children, style, isPressable = false, onPress }) {
+  const { theme } = useTheme();
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const bounce = (to) => {
+    if (!isPressable) return;
+    Animated.spring(scale, {
+      toValue: to,
+      useNativeDriver: true,
+      speed: 30,
+      bounciness: 8,
+    }).start();
+  };
+
+  const content = (
+    <Animated.View
+      style={[
+        styles.cardBase,
+        {
+          backgroundColor: theme.card,
+          borderColor: theme.border,
+          transform: [{ scale }],
+        },
+        shadowSoft,
+        style,
+      ]}
+    >
+      {children}
+    </Animated.View>
+  );
+
+  if (isPressable) {
+    return (
+      <Pressable
+        onPress={onPress}
+        onPressIn={() => bounce(0.98)}
+        onPressOut={() => bounce(1)}
+      >
+        {content}
+      </Pressable>
+    );
+  }
+  return content;
+}
+
+HeroCard.Header = function HeroCardHeader({ children, style }) {
+  return <View style={[styles.cardHeader, style]}>{children}</View>;
+};
+
+HeroCard.Body = function HeroCardBody({ children, style }) {
+  return <View style={[styles.cardBody, style]}>{children}</View>;
+};
+
+HeroCard.Footer = function HeroCardFooter({ children, style }) {
+  return <View style={[styles.cardFooter, style]}>{children}</View>;
+};
+
+/* ============================================================================
+   11. HERO SEPARATOR & HERO SURFACE
+   ============================================================================ */
+export function HeroSeparator({ style }) {
+  const { theme } = useTheme();
+  return (
+    <View
+      style={[
+        styles.separator,
+        { backgroundColor: theme.border },
+        style,
+      ]}
+    />
+  );
+}
+
+export function HeroSurface({ children, style }) {
+  const { theme } = useTheme();
+  return (
+    <View
+      style={[
+        styles.surfaceBase,
+        { backgroundColor: theme.surface, borderColor: theme.border },
+        style,
+      ]}
+    >
+      {children}
+    </View>
+  );
+}
+
+/* ============================================================================
+   12. HERO DIALOG (Modale de dialogue centrée)
+   ============================================================================ */
+export function HeroDialog({
+  visible,
+  onClose,
+  title,
+  description,
+  icon,
+  iconColor,
+  iconBg,
+  children,
+  maxWidth = 420,
+}) {
+  const { theme } = useTheme();
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.dialogBackdrop} onPress={onClose}>
+        <Pressable
+          style={[
+            styles.dialogCard,
+            { maxWidth, backgroundColor: theme.card, borderColor: theme.border },
+            shadow,
+          ]}
+          onPress={(e) => e.stopPropagation()}
+        >
+          <HeroCloseButton
+            variant="ghost"
+            size="sm"
+            accessibilityLabel="Fermer"
+            onPress={onClose}
+            style={styles.dialogCloseBtn}
+          />
+
+          {icon ? (
+            <View
+              style={[
+                styles.dialogIconCircle,
+                { backgroundColor: iconBg || theme.accentSoft },
+              ]}
+            >
+              <Ionicons
+                name={icon}
+                size={28}
+                color={iconColor || theme.accent}
+              />
+            </View>
+          ) : null}
+
+          {title ? (
+            <Text style={[styles.dialogTitle, { color: theme.text }]}>
+              {title}
+            </Text>
+          ) : null}
+
+          {description ? (
+            <Text
+              style={[styles.dialogDescription, { color: theme.textSecondary }]}
+            >
+              {description}
+            </Text>
+          ) : null}
+
+          {children}
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+/* ============================================================================
+   13. HERO ALERT (Bandeau de notification / alerte HeroUI)
+   ============================================================================ */
+export function HeroAlert({
+  title,
+  description,
+  variant = 'primary', // 'primary' | 'success' | 'warning' | 'danger'
+  style,
+}) {
+  const { theme } = useTheme();
+
+  const MAP = {
+    primary: {
+      bg: theme.accentSoft,
+      border: theme.accent,
+      icon: 'information-circle',
+      color: theme.accent,
+    },
+    success: {
+      bg: theme.whatsappSoft,
+      border: theme.whatsapp,
+      icon: 'checkmark-circle',
+      color: theme.whatsapp,
+    },
+    warning: {
+      bg: theme.warningSoft,
+      border: theme.warning,
+      icon: 'warning',
+      color: theme.warning,
+    },
+    danger: {
+      bg: theme.dangerSoft,
+      border: theme.danger,
+      icon: 'alert-circle',
+      color: theme.danger,
+    },
+  };
+
+  const m = MAP[variant] || MAP.primary;
+
+  return (
+    <View
+      style={[
+        styles.alertBox,
+        {
+          backgroundColor: m.bg,
+          borderColor: `${m.border}44`,
+        },
+        style,
+      ]}
+    >
+      <Ionicons
+        name={m.icon}
+        size={20}
+        color={m.color}
+        style={{ marginRight: 10, marginTop: 1 }}
+      />
+      <View style={{ flex: 1 }}>
+        {title ? (
+          <Text style={[styles.alertTitle, { color: m.color }]}>{title}</Text>
+        ) : null}
+        {description ? (
+          <Text
+            style={[
+              styles.alertDesc,
+              { color: theme.textSecondary, marginTop: title ? 2 : 0 },
+            ]}
+          >
+            {description}
+          </Text>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
 export { default as HeroButton, useButton } from './Button';
 
 const styles = StyleSheet.create({
@@ -930,9 +1243,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     paddingVertical: 11,
   },
-  searchClear: {
-    padding: 4,
-  },
   sheetBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(9, 9, 11, 0.68)',
@@ -1002,5 +1312,90 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     marginTop: 1,
+  },
+  cardBase: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  cardHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 10,
+  },
+  cardBody: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  cardFooter: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 16,
+  },
+  separator: {
+    height: 1,
+    width: '100%',
+    marginVertical: 12,
+  },
+  surfaceBase: {
+    borderRadius: radius.md,
+    borderWidth: 1,
+    padding: 14,
+  },
+  dialogBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(9, 9, 11, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  dialogCard: {
+    width: '100%',
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    padding: 22,
+    alignItems: 'center',
+    position: 'relative',
+  },
+  dialogCloseBtn: {
+    position: 'absolute',
+    top: 14,
+    right: 14,
+  },
+  dialogIconCircle: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  dialogTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  dialogDescription: {
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'center',
+    marginBottom: 18,
+  },
+  alertBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    padding: 12,
+    marginVertical: 8,
+  },
+  alertTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  alertDesc: {
+    fontSize: 12,
+    lineHeight: 17,
   },
 });
