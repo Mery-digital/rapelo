@@ -16,7 +16,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Field from '../components/Field';
 import Button from '../components/Button';
-import { colors, radius, shadow } from '../theme';
+import { HeroSwitch } from '../components/HeroUI';
+import { useTheme } from '../context/ThemeContext';
+import { radius, shadow } from '../theme';
 import { saveAtelier, clearAtelier, hashPassword } from '../lib/storage';
 import { digitsOnly } from '../lib/messaging';
 
@@ -27,11 +29,8 @@ const WORKSHOP_BADGES = [
   { icon: 'flash-outline', label: 'Charge & Batterie', color: '#F472B6' },
 ];
 
-/**
- * mode = "setup" : first time, create the workshop
- * mode = "login" : workshop already saved, check phone + password
- */
 export default function SetupScreen({ mode, savedAtelier, onDone, onReset }) {
+  const { theme, isDark, toggleTheme } = useTheme();
   const isLogin = mode === 'login';
   const [phone, setPhone] = useState(isLogin ? savedAtelier?.phone || '' : '');
   const [password, setPassword] = useState('');
@@ -57,7 +56,6 @@ export default function SetupScreen({ mode, savedAtelier, onDone, onReset }) {
       }),
     ]).start();
 
-    // Floating repair tools animation
     Animated.loop(
       Animated.sequence([
         Animated.timing(floatAnim, {
@@ -75,7 +73,6 @@ export default function SetupScreen({ mode, savedAtelier, onDone, onReset }) {
       ])
     ).start();
 
-    // Pulsing workshop status dot
     Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
@@ -91,7 +88,6 @@ export default function SetupScreen({ mode, savedAtelier, onDone, onReset }) {
       ])
     ).start();
 
-    // Slow oscillating wrench/gear motion
     Animated.loop(
       Animated.sequence([
         Animated.timing(spinAnim, {
@@ -192,37 +188,42 @@ export default function SetupScreen({ mode, savedAtelier, onDone, onReset }) {
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: theme.bg }]}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <ScrollView
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* VITRINE D'ATELIER ANIMÉE */}
+          {/* VITRINE D'ATELIER ANIMÉE HEROUI */}
           <Animated.View
             style={[
               styles.heroShowcase,
               { opacity: fade, transform: [{ translateY: slide }] },
+              shadow,
             ]}
           >
             <LinearGradient
-              colors={['#0B1120', '#1E3A8A', '#1D4ED8']}
+              colors={isDark ? ['#18181B', '#27272A', '#004493'] : ['#0B1120', '#1E3A8A', '#006FEE']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.heroGradient}
             >
-              {/* Bandeau supérieur statut atelier */}
-              <View style={styles.liveAtelierPill}>
-                <Animated.View
-                  style={[
-                    styles.liveDot,
-                    { transform: [{ scale: pulseAnim }] },
-                  ]}
-                />
-                <Text style={styles.liveAtelierText}>
-                  SYSTÈME PROFESSIONNEL POUR RÉPARATEURS
-                </Text>
+              {/* Barre supérieure : badge live + interrupteur Jour / Nuit */}
+              <View style={styles.topHeroBar}>
+                <View style={styles.liveAtelierPill}>
+                  <Animated.View
+                    style={[
+                      styles.liveDot,
+                      { transform: [{ scale: pulseAnim }] },
+                    ]}
+                  />
+                  <Text style={styles.liveAtelierText}>
+                    ATELIER PRO · RAPELO
+                  </Text>
+                </View>
+
+                <HeroSwitch value={isDark} onValueChange={toggleTheme} />
               </View>
 
               {/* Logo central + outils flottants animés */}
@@ -277,28 +278,45 @@ export default function SetupScreen({ mode, savedAtelier, onDone, onReset }) {
             </LinearGradient>
           </Animated.View>
 
-          {/* CARTE DE CONNEXION / CONFIGURATION */}
+          {/* CARTE HEROUI DE CONNEXION / CONFIGURATION */}
           <Animated.View
-            style={[styles.card, { opacity: fade, transform: [{ translateY: slide }] }]}
+            style={[
+              styles.card,
+              {
+                backgroundColor: theme.card,
+                borderColor: theme.border,
+                opacity: fade,
+                transform: [{ translateY: slide }],
+              },
+              shadow,
+            ]}
           >
             <View style={styles.cardHeaderRow}>
-              <View style={styles.cardHeaderIcon}>
+              <View
+                style={[styles.cardHeaderIcon, { backgroundColor: theme.accentSoft }]}
+              >
                 <Ionicons
                   name={isLogin ? 'shield-checkmark' : 'construct'}
                   size={20}
-                  color={colors.accent}
+                  color={theme.accent}
                 />
               </View>
               <View style={{ flex: 1 }}>
                 {isLogin ? (
                   <>
-                    <Text style={styles.title}>Bon retour à l'atelier</Text>
-                    <Text style={styles.subtitle}>{savedAtelier?.atelierNom}</Text>
+                    <Text style={[styles.title, { color: theme.text }]}>
+                      Bon retour à l'atelier
+                    </Text>
+                    <Text style={[styles.subtitle, { color: theme.muted }]}>
+                      {savedAtelier?.atelierNom}
+                    </Text>
                   </>
                 ) : (
                   <>
-                    <Text style={styles.title}>Configure ton atelier</Text>
-                    <Text style={styles.subtitle}>
+                    <Text style={[styles.title, { color: theme.text }]}>
+                      Configure ton atelier
+                    </Text>
+                    <Text style={[styles.subtitle, { color: theme.muted }]}>
                       Ces coordonnées s'ajoutent automatiquement sur les reçus WhatsApp et SMS des clients.
                     </Text>
                   </>
@@ -362,8 +380,10 @@ export default function SetupScreen({ mode, savedAtelier, onDone, onReset }) {
 
             {isLogin && (
               <Pressable onPress={handleReset} style={styles.link}>
-                <Ionicons name="refresh-circle-outline" size={16} color={colors.sms} />
-                <Text style={styles.linkText}>Changer d’atelier / Mot de passe oublié</Text>
+                <Ionicons name="refresh-circle-outline" size={16} color={theme.accent} />
+                <Text style={[styles.linkText, { color: theme.accent }]}>
+                  Changer d’atelier / Mot de passe oublié
+                </Text>
               </Pressable>
             )}
           </Animated.View>
@@ -374,18 +394,24 @@ export default function SetupScreen({ mode, savedAtelier, onDone, onReset }) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
+  safe: { flex: 1 },
   scroll: { padding: 18, paddingTop: 20, flexGrow: 1, justifyContent: 'center' },
   heroShowcase: {
     marginBottom: 16,
     borderRadius: radius.xl,
     overflow: 'hidden',
-    ...shadow,
   },
   heroGradient: {
     paddingHorizontal: 18,
-    paddingVertical: 20,
+    paddingVertical: 18,
     alignItems: 'center',
+  },
+  topHeroBar: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
   },
   liveAtelierPill: {
     flexDirection: 'row',
@@ -396,7 +422,6 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 5,
-    marginBottom: 14,
   },
   liveDot: {
     width: 8,
@@ -427,12 +452,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  orbitLeft: {
-    marginRight: 12,
-  },
-  orbitRight: {
-    marginLeft: 12,
-  },
+  orbitLeft: { marginRight: 12 },
+  orbitRight: { marginLeft: 12 },
   logoCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 22,
@@ -479,12 +500,9 @@ const styles = StyleSheet.create({
     marginLeft: 5,
   },
   card: {
-    backgroundColor: colors.card,
     borderRadius: radius.xl,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    ...shadow,
   },
   cardHeaderRow: {
     flexDirection: 'row',
@@ -495,18 +513,17 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 14,
-    backgroundColor: colors.accentSoft,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
-  title: { fontSize: 20, fontWeight: '900', color: colors.text },
-  subtitle: { fontSize: 12, color: colors.muted, marginTop: 2, lineHeight: 17 },
+  title: { fontSize: 20, fontWeight: '900' },
+  subtitle: { fontSize: 12, marginTop: 2, lineHeight: 17 },
   link: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 16,
   },
-  linkText: { color: colors.sms, fontSize: 13, fontWeight: '700', marginLeft: 5 },
+  linkText: { fontSize: 13, fontWeight: '700', marginLeft: 5 },
 });

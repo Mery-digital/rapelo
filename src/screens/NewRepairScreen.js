@@ -15,7 +15,8 @@ import * as Haptics from 'expo-haptics';
 import Field from '../components/Field';
 import Button from '../components/Button';
 import PhotoPicker from '../components/PhotoPicker';
-import { colors, radius, shadow, shadowSoft } from '../theme';
+import { useTheme } from '../context/ThemeContext';
+import { radius, shadow, shadowSoft } from '../theme';
 import { createRepair } from '../lib/repairs';
 import { persistPhotoUri } from '../lib/photos';
 import {
@@ -51,6 +52,7 @@ const QUICK_PROBLEMS = [
 ];
 
 export default function NewRepairScreen({ atelier, onCreated }) {
+  const { theme, isDark } = useTheme();
   const defaultDial = digitsOnly(atelier?.indicatif) || '225';
   const makeEmpty = () => ({
     category: 'phone',
@@ -65,7 +67,7 @@ export default function NewRepairScreen({ atelier, onCreated }) {
   });
 
   const [form, setForm] = useState(makeEmpty);
-  const [sending, setSending] = useState(null); // 'whatsapp' | 'sms' | null
+  const [sending, setSending] = useState(null);
   const scrollY = useRef(new Animated.Value(0)).current;
   const toolAnim = useRef(new Animated.Value(0)).current;
 
@@ -142,8 +144,6 @@ export default function NewRepairScreen({ atelier, onCreated }) {
     if (!validate()) return;
     setSending(channel);
 
-    // Store the number with its '+' international format when using a country prefix
-    // so later "Ready" notifications from the list always use the right country code!
     const rawTel = form.clientTel.trim();
     const dialCode = form.dialCode || defaultDial;
     const intlDigits = toInternational(rawTel, dialCode);
@@ -213,12 +213,12 @@ export default function NewRepairScreen({ atelier, onCreated }) {
 
   const bannerScale = scrollY.interpolate({
     inputRange: [-60, 0, 140],
-    outputRange: [1.05, 1, 0.95],
+    outputRange: [1.04, 1, 0.96],
     extrapolate: 'clamp',
   });
   const bannerTranslateY = scrollY.interpolate({
     inputRange: [0, 140],
-    outputRange: [0, -8],
+    outputRange: [0, -6],
     extrapolate: 'clamp',
   });
 
@@ -244,10 +244,14 @@ export default function NewRepairScreen({ atelier, onCreated }) {
         }}
       >
         <LinearGradient
-          colors={['#0B1120', '#1E3A8A', '#1D4ED8']}
+          colors={isDark ? ['#18181B', '#27272A'] : ['#0B1120', '#1E3A8A', '#006FEE']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={styles.heroBanner}
+          style={[
+            styles.heroBanner,
+            isDark && { borderWidth: 1, borderColor: '#3F3F46' },
+            shadow,
+          ]}
         >
           <View style={styles.heroTopRow}>
             <Animated.View
@@ -286,12 +290,18 @@ export default function NewRepairScreen({ atelier, onCreated }) {
         </LinearGradient>
       </Animated.View>
 
-      <View style={styles.card}>
-        {/* 1. Direct Camera & Gallery Picker */}
+      <View
+        style={[
+          styles.card,
+          { backgroundColor: theme.card, borderColor: theme.border },
+          shadow,
+        ]}
+      >
         <PhotoPicker uri={form.photoUri} onChange={set('photoUri')} />
 
-        {/* 2. Electronic Device Category Chips */}
-        <Text style={styles.sectionLabel}>TYPE D'APPAREIL ÉLECTRONIQUE</Text>
+        <Text style={[styles.sectionLabel, { color: theme.muted }]}>
+          TYPE D'APPAREIL ÉLECTRONIQUE
+        </Text>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -315,7 +325,6 @@ export default function NewRepairScreen({ atelier, onCreated }) {
           onChangeText={set('appareil')}
         />
 
-        {/* 3. Customer Info */}
         <Field
           label="Nom du client"
           icon="person-outline"
@@ -324,8 +333,9 @@ export default function NewRepairScreen({ atelier, onCreated }) {
           onChangeText={set('clientNom')}
         />
 
-        {/* Country dial code selector so WhatsApp always gets the exact country prefix */}
-        <Text style={styles.sectionLabel}>PAYS DU NUMÉRO WHATSAPP</Text>
+        <Text style={[styles.sectionLabel, { color: theme.muted }]}>
+          PAYS DU NUMÉRO WHATSAPP
+        </Text>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -337,10 +347,23 @@ export default function NewRepairScreen({ atelier, onCreated }) {
               <Pressable
                 key={c.code}
                 onPress={() => selectDialCode(c.code)}
-                style={[styles.dialChip, active && styles.dialChipActive]}
+                style={[
+                  styles.dialChip,
+                  {
+                    backgroundColor: active ? theme.whatsappSoft : theme.surface,
+                    borderColor: active ? theme.whatsappDark : theme.border,
+                  },
+                ]}
               >
                 <Text style={styles.dialFlag}>{c.flag}</Text>
-                <Text style={[styles.dialText, active && styles.dialTextActive]}>
+                <Text
+                  style={[
+                    styles.dialText,
+                    {
+                      color: active ? theme.whatsappDark : theme.textSecondary,
+                    },
+                  ]}
+                >
                   +{c.code}
                 </Text>
               </Pressable>
@@ -363,7 +386,6 @@ export default function NewRepairScreen({ atelier, onCreated }) {
           }
         />
 
-        {/* 4. Problem + Quick Problem Chips */}
         <Field
           label="Panne / Problème constaté"
           icon="build-outline"
@@ -378,7 +400,6 @@ export default function NewRepairScreen({ atelier, onCreated }) {
           ))}
         </View>
 
-        {/* 5. Price & Advance in FCFA */}
         <Field
           label="Prix estimé de la réparation (Total)"
           icon="cash-outline"
@@ -403,9 +424,9 @@ export default function NewRepairScreen({ atelier, onCreated }) {
           <BalancePreview prix={form.prix} avance={form.avance} />
         ) : null}
 
-        <View style={styles.divider} />
+        <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
-        <Text style={styles.sendLabel}>
+        <Text style={[styles.sendLabel, { color: theme.textSecondary }]}>
           Enregistrer la fiche et envoyer le reçu au client :
         </Text>
         <View style={styles.actions}>
@@ -435,28 +456,43 @@ export default function NewRepairScreen({ atelier, onCreated }) {
 }
 
 function BalancePreview({ prix, avance }) {
+  const { theme } = useTheme();
   const { total, paid, reste } = computeBalance(prix, avance);
   const isPaidFull = total > 0 && reste === 0;
   return (
-    <View style={[styles.balanceCard, isPaidFull && styles.balanceCardPaid]}>
+    <View
+      style={[
+        styles.balanceCard,
+        {
+          backgroundColor: isPaidFull ? theme.badgeGreen : theme.surface,
+          borderColor: isPaidFull ? `${theme.success}66` : theme.border,
+        },
+      ]}
+    >
       <View style={styles.balanceItem}>
-        <Text style={styles.balanceLabel}>Total</Text>
-        <Text style={styles.balanceValue}>{formatPrice(total)}</Text>
+        <Text style={[styles.balanceLabel, { color: theme.muted }]}>Total</Text>
+        <Text style={[styles.balanceValue, { color: theme.text }]}>
+          {formatPrice(total)}
+        </Text>
       </View>
-      <View style={styles.balanceSep} />
+      <View style={[styles.balanceSep, { backgroundColor: theme.border }]} />
       <View style={styles.balanceItem}>
-        <Text style={styles.balanceLabel}>Avance payée</Text>
-        <Text style={[styles.balanceValue, { color: colors.success }]}>
+        <Text style={[styles.balanceLabel, { color: theme.muted }]}>
+          Avance payée
+        </Text>
+        <Text style={[styles.balanceValue, { color: theme.success }]}>
           {formatPrice(paid)}
         </Text>
       </View>
-      <View style={styles.balanceSep} />
+      <View style={[styles.balanceSep, { backgroundColor: theme.border }]} />
       <View style={styles.balanceItem}>
-        <Text style={styles.balanceLabel}>Reste à payer</Text>
+        <Text style={[styles.balanceLabel, { color: theme.muted }]}>
+          Reste à payer
+        </Text>
         <Text
           style={[
             styles.balanceValue,
-            { color: isPaidFull ? colors.success : colors.danger },
+            { color: isPaidFull ? theme.success : theme.danger },
           ]}
         >
           {isPaidFull ? 'Soldé (0 FCFA)' : formatPrice(reste)}
@@ -467,6 +503,7 @@ function BalancePreview({ prix, avance }) {
 }
 
 function CategoryChip({ cat, active, onPress }) {
+  const { theme } = useTheme();
   const scale = useRef(new Animated.Value(1)).current;
   const bounce = (to) =>
     Animated.spring(scale, {
@@ -482,14 +519,26 @@ function CategoryChip({ cat, active, onPress }) {
         onPress={onPress}
         onPressIn={() => bounce(0.92)}
         onPressOut={() => bounce(1)}
-        style={[styles.catChip, active && styles.catChipActive]}
+        style={[
+          styles.catChip,
+          {
+            backgroundColor: active ? theme.accent : theme.surface,
+            borderColor: active ? theme.accent : theme.border,
+          },
+          shadowSoft,
+        ]}
       >
         <Ionicons
           name={cat.icon}
           size={17}
-          color={active ? '#FFFFFF' : colors.textSecondary}
+          color={active ? '#FFFFFF' : theme.textSecondary}
         />
-        <Text style={[styles.catChipText, active && styles.catChipTextActive]}>
+        <Text
+          style={[
+            styles.catChipText,
+            { color: active ? '#FFFFFF' : theme.textSecondary },
+          ]}
+        >
           {cat.label}
         </Text>
       </Pressable>
@@ -498,6 +547,7 @@ function CategoryChip({ cat, active, onPress }) {
 }
 
 function QuickChip({ label, onPress }) {
+  const { theme } = useTheme();
   const scale = useRef(new Animated.Value(1)).current;
   const bounce = (to) =>
     Animated.spring(scale, {
@@ -513,9 +563,17 @@ function QuickChip({ label, onPress }) {
         onPress={onPress}
         onPressIn={() => bounce(0.92)}
         onPressOut={() => bounce(1)}
-        style={styles.quickChip}
+        style={[
+          styles.quickChip,
+          {
+            backgroundColor: theme.accentSoft,
+            borderColor: `${theme.accent}44`,
+          },
+        ]}
       >
-        <Text style={styles.quickChipText}>+ {label}</Text>
+        <Text style={[styles.quickChipText, { color: theme.accent }]}>
+          + {label}
+        </Text>
       </Pressable>
     </Animated.View>
   );
@@ -527,7 +585,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     padding: 16,
     marginBottom: 14,
-    ...shadow,
   },
   heroTopRow: {
     flexDirection: 'row',
@@ -576,17 +633,13 @@ const styles = StyleSheet.create({
     marginLeft: 5,
   },
   card: {
-    backgroundColor: colors.card,
     borderRadius: radius.lg,
     padding: 18,
     borderWidth: 1,
-    borderColor: '#E8EEF6',
-    ...shadow,
   },
   sectionLabel: {
     fontSize: 11,
     fontWeight: '900',
-    color: colors.muted,
     letterSpacing: 0.7,
     marginBottom: 8,
   },
@@ -596,26 +649,15 @@ const styles = StyleSheet.create({
   catChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
     borderWidth: 1.5,
-    borderColor: colors.border,
     borderRadius: 999,
     paddingHorizontal: 13,
     paddingVertical: 9,
-    ...shadowSoft,
-  },
-  catChipActive: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
   },
   catChipText: {
     fontSize: 13,
     fontWeight: '700',
-    color: colors.textSecondary,
     marginLeft: 6,
-  },
-  catChipTextActive: {
-    color: '#FFFFFF',
   },
   dialScroll: {
     paddingBottom: 10,
@@ -623,21 +665,14 @@ const styles = StyleSheet.create({
   dialChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
     borderWidth: 1.5,
-    borderColor: colors.border,
     borderRadius: 999,
     paddingHorizontal: 11,
     paddingVertical: 6,
     marginRight: 7,
   },
-  dialChipActive: {
-    backgroundColor: '#DCFCE7',
-    borderColor: colors.whatsappDark,
-  },
   dialFlag: { fontSize: 14, marginRight: 5 },
-  dialText: { fontSize: 12, fontWeight: '800', color: colors.textSecondary },
-  dialTextActive: { color: colors.whatsappDark },
+  dialText: { fontSize: 12, fontWeight: '800' },
   quickProblemsWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -645,38 +680,28 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   quickChip: {
-    backgroundColor: '#EEF2FF',
     borderRadius: 999,
     paddingHorizontal: 11,
     paddingVertical: 6,
     borderWidth: 1,
-    borderColor: '#C7D2FE',
   },
   quickChipText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#3730A3',
   },
   divider: {
     height: 1,
-    backgroundColor: colors.border,
     marginVertical: 14,
   },
   balanceCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8FAFC',
     borderWidth: 1.5,
-    borderColor: '#CBD5E1',
     borderRadius: radius.md,
     paddingVertical: 10,
     paddingHorizontal: 10,
     marginTop: -4,
     marginBottom: 4,
-  },
-  balanceCardPaid: {
-    backgroundColor: '#F0FDF4',
-    borderColor: '#86EFAC',
   },
   balanceItem: {
     flex: 1,
@@ -685,23 +710,19 @@ const styles = StyleSheet.create({
   balanceSep: {
     width: 1,
     height: 28,
-    backgroundColor: '#E2E8F0',
   },
   balanceLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: colors.muted,
   },
   balanceValue: {
     fontSize: 13,
     fontWeight: '900',
-    color: colors.text,
     marginTop: 2,
   },
   sendLabel: {
     fontSize: 13,
     fontWeight: '800',
-    color: colors.textSecondary,
     marginBottom: 10,
   },
   actions: { flexDirection: 'row' },

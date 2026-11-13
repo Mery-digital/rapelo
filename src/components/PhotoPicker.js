@@ -10,15 +10,16 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { colors, radius, shadowSoft } from '../theme';
+import { useTheme } from '../context/ThemeContext';
+import { radius, shadowSoft } from '../theme';
 import { pickDevicePhoto } from '../lib/photos';
 
 export default function PhotoPicker({ uri, onChange }) {
+  const { theme, isDark } = useTheme();
   const scaleCam = useRef(new Animated.Value(1)).current;
   const scaleGal = useRef(new Animated.Value(1)).current;
   const pulse = useRef(new Animated.Value(1)).current;
 
-  // Subtle breathing animation on the camera icon to draw attention
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
@@ -46,8 +47,6 @@ export default function PhotoPicker({ uri, onChange }) {
       bounciness: 12,
     }).start();
 
-  // Directly launches the phone's native camera app (`launchCameraAsync`)
-  // or native photo gallery (`launchImageLibraryAsync`)
   const openDirect = async (source) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     const pickedUri = await pickDevicePhoto(source);
@@ -60,11 +59,15 @@ export default function PhotoPicker({ uri, onChange }) {
   return (
     <View style={styles.wrap}>
       <View style={styles.headerRow}>
-        <View style={styles.titleBadge}>
-          <Ionicons name="camera" size={14} color={colors.accent} />
-          <Text style={styles.label}>PHOTO DE L'APPAREIL</Text>
+        <View style={[styles.titleBadge, { backgroundColor: theme.accentSoft }]}>
+          <Ionicons name="camera" size={14} color={theme.accent} />
+          <Text style={[styles.label, { color: theme.accent }]}>
+            PHOTO DE L'APPAREIL
+          </Text>
         </View>
-        <Text style={styles.optional}>Caméra directe</Text>
+        <Text style={[styles.optional, { color: theme.muted }]}>
+          Caméra directe
+        </Text>
       </View>
 
       {uri ? (
@@ -80,38 +83,58 @@ export default function PhotoPicker({ uri, onChange }) {
             </View>
           </LinearGradient>
 
-          <View style={styles.previewActions}>
-            <Pressable onPress={() => openDirect('camera')} style={styles.smallBtn}>
-              <Ionicons name="camera-outline" size={16} color={colors.accent} />
-              <Text style={styles.smallBtnText}>Reprendre</Text>
+          <View
+            style={[
+              styles.previewActions,
+              { backgroundColor: theme.card, borderColor: theme.border },
+            ]}
+          >
+            <Pressable
+              onPress={() => openDirect('camera')}
+              style={[styles.smallBtn, { backgroundColor: theme.surface }]}
+            >
+              <Ionicons name="camera-outline" size={16} color={theme.accent} />
+              <Text style={[styles.smallBtnText, { color: theme.text }]}>
+                Reprendre
+              </Text>
             </Pressable>
-            <Pressable onPress={() => openDirect('gallery')} style={styles.smallBtn}>
-              <Ionicons name="images-outline" size={16} color={colors.text} />
-              <Text style={styles.smallBtnText}>Galerie</Text>
+            <Pressable
+              onPress={() => openDirect('gallery')}
+              style={[styles.smallBtn, { backgroundColor: theme.surface }]}
+            >
+              <Ionicons name="images-outline" size={16} color={theme.text} />
+              <Text style={[styles.smallBtnText, { color: theme.text }]}>
+                Galerie
+              </Text>
             </Pressable>
             <Pressable
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
                 onChange?.(null);
               }}
-              style={[styles.smallBtn, styles.removeBtn]}
+              style={[styles.smallBtn, { backgroundColor: theme.dangerSoft }]}
             >
-              <Ionicons name="trash-outline" size={16} color={colors.danger} />
-              <Text style={styles.removeBtnText}>Retirer</Text>
+              <Ionicons name="trash-outline" size={16} color={theme.danger} />
+              <Text style={[styles.removeBtnText, { color: theme.danger }]}>
+                Retirer
+              </Text>
             </Pressable>
           </View>
         </View>
       ) : (
         <LinearGradient
-          colors={['#EFF6FF', '#F8FAFC']}
+          colors={isDark ? ['#18181B', '#27272A'] : ['#EFF6FF', '#F8FAFC']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={styles.pickerBox}
+          style={[
+            styles.pickerBox,
+            { borderColor: isDark ? '#338EF7' : '#93C5FD' },
+          ]}
         >
-          <Text style={styles.pickerTitle}>
+          <Text style={[styles.pickerTitle, { color: theme.text }]}>
             Photographie l'appareil électronique déposé
           </Text>
-          <Text style={styles.pickerHint}>
+          <Text style={[styles.pickerHint, { color: theme.muted }]}>
             Ouvre directement l'appareil photo de ton téléphone pour garder une preuve de l'état.
           </Text>
 
@@ -123,7 +146,7 @@ export default function PhotoPicker({ uri, onChange }) {
                 onPressOut={() => bounce(scaleCam, 1)}
               >
                 <LinearGradient
-                  colors={['#2563EB', '#1D4ED8']}
+                  colors={['#006FEE', '#004493']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.pickBtn}
@@ -146,13 +169,26 @@ export default function PhotoPicker({ uri, onChange }) {
                 onPress={() => openDirect('gallery')}
                 onPressIn={() => bounce(scaleGal, 0.93)}
                 onPressOut={() => bounce(scaleGal, 1)}
-                style={[styles.pickBtn, styles.galBtn]}
+                style={[
+                  styles.pickBtn,
+                  {
+                    backgroundColor: theme.card,
+                    borderWidth: 1.5,
+                    borderColor: theme.border,
+                  },
+                ]}
               >
-                <View style={[styles.camIconCircle, { backgroundColor: colors.accentSoft }]}>
-                  <Ionicons name="images" size={24} color={colors.accent} />
+                <View
+                  style={[styles.camIconCircle, { backgroundColor: theme.accentSoft }]}
+                >
+                  <Ionicons name="images" size={24} color={theme.accent} />
                 </View>
-                <Text style={styles.galBtnTitle}>Galerie photo</Text>
-                <Text style={styles.galBtnSub}>Choisir une image</Text>
+                <Text style={[styles.galBtnTitle, { color: theme.text }]}>
+                  Galerie photo
+                </Text>
+                <Text style={[styles.galBtnSub, { color: theme.muted }]}>
+                  Choisir une image
+                </Text>
               </Pressable>
             </Animated.View>
           </View>
@@ -174,7 +210,6 @@ const styles = StyleSheet.create({
   titleBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.accentSoft,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 999,
@@ -182,27 +217,23 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 11,
     fontWeight: '900',
-    color: colors.accent,
     letterSpacing: 0.7,
     marginLeft: 6,
   },
-  optional: { fontSize: 12, fontWeight: '600', color: colors.muted },
+  optional: { fontSize: 12, fontWeight: '600' },
   pickerBox: {
     borderWidth: 1.5,
     borderStyle: 'dashed',
-    borderColor: '#93C5FD',
     borderRadius: radius.lg,
     padding: 16,
   },
   pickerTitle: {
     fontSize: 15,
     fontWeight: '800',
-    color: colors.text,
     textAlign: 'center',
   },
   pickerHint: {
     fontSize: 12,
-    color: colors.muted,
     textAlign: 'center',
     marginTop: 4,
     marginBottom: 14,
@@ -217,11 +248,6 @@ const styles = StyleSheet.create({
     minHeight: 126,
     ...shadowSoft,
   },
-  galBtn: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1.5,
-    borderColor: colors.border,
-  },
   camIconCircle: {
     width: 50,
     height: 50,
@@ -233,8 +259,8 @@ const styles = StyleSheet.create({
   },
   camBtnTitle: { fontSize: 14, fontWeight: '800', color: '#FFFFFF', textAlign: 'center' },
   camBtnSub: { fontSize: 11, color: '#DBEAFE', marginTop: 2, textAlign: 'center' },
-  galBtnTitle: { fontSize: 14, fontWeight: '800', color: colors.text, textAlign: 'center' },
-  galBtnSub: { fontSize: 11, color: colors.muted, marginTop: 2, textAlign: 'center' },
+  galBtnTitle: { fontSize: 14, fontWeight: '800', textAlign: 'center' },
+  galBtnSub: { fontSize: 11, marginTop: 2, textAlign: 'center' },
   previewCard: {
     borderRadius: radius.lg,
     overflow: 'hidden',
@@ -256,7 +282,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(22, 163, 74, 0.92)',
+    backgroundColor: 'rgba(23, 201, 100, 0.92)',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 999,
@@ -264,12 +290,10 @@ const styles = StyleSheet.create({
   previewTagText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800', marginLeft: 5 },
   previewActions: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
     padding: 8,
     justifyContent: 'space-between',
     borderWidth: 1,
     borderTopWidth: 0,
-    borderColor: colors.border,
     borderBottomLeftRadius: radius.lg,
     borderBottomRightRadius: radius.lg,
   },
@@ -279,11 +303,9 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     marginHorizontal: 3,
     borderRadius: radius.sm,
-    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  smallBtnText: { fontSize: 13, fontWeight: '700', color: colors.text, marginLeft: 5 },
-  removeBtn: { backgroundColor: colors.dangerSoft },
-  removeBtnText: { fontSize: 13, fontWeight: '700', color: colors.danger, marginLeft: 5 },
+  smallBtnText: { fontSize: 13, fontWeight: '700', marginLeft: 5 },
+  removeBtnText: { fontSize: 13, fontWeight: '700', marginLeft: 5 },
 });

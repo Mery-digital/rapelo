@@ -1,7 +1,8 @@
 import React, { useRef, useState } from 'react';
 import { View, Text, TextInput, Animated, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, radius } from '../theme';
+import { useTheme } from '../context/ThemeContext';
+import { radius } from '../theme';
 
 export default function Field({
   label,
@@ -14,13 +15,14 @@ export default function Field({
   onBlur,
   ...inputProps
 }) {
+  const { theme } = useTheme();
   const [focused, setFocused] = useState(false);
   const scale = useRef(new Animated.Value(1)).current;
 
   const handleFocus = (e) => {
     setFocused(true);
     Animated.spring(scale, {
-      toValue: 1.015,
+      toValue: 1.01,
       useNativeDriver: true,
       speed: 28,
       bounciness: 8,
@@ -42,60 +44,84 @@ export default function Field({
   return (
     <View style={[styles.wrap, style]}>
       {label ? (
-        <Text style={[styles.label, focused && styles.labelFocused]}>{label}</Text>
+        <Text
+          style={[
+            styles.label,
+            { color: focused ? theme.accent : theme.textSecondary },
+          ]}
+        >
+          {label}
+        </Text>
       ) : null}
       <Animated.View
         style={[
           styles.inputBox,
+          {
+            backgroundColor: focused ? theme.inputBgFocus : theme.inputBg,
+            borderColor: focused ? theme.accent : theme.border,
+          },
           multiline && styles.multilineBox,
-          focused && styles.inputBoxFocused,
+          focused && {
+            shadowColor: theme.accent,
+            shadowOpacity: 0.14,
+            shadowRadius: 8,
+            shadowOffset: { width: 0, height: 3 },
+            elevation: 2,
+          },
           { transform: [{ scale }] },
         ]}
       >
         {icon ? (
-          <View style={[styles.iconWrap, focused && styles.iconWrapFocused]}>
+          <View
+            style={[
+              styles.iconWrap,
+              { backgroundColor: focused ? theme.accentSoft : theme.border },
+            ]}
+          >
             <Ionicons
               name={icon}
               size={18}
-              color={focused ? colors.accent : colors.muted}
+              color={focused ? theme.accent : theme.muted}
             />
           </View>
         ) : null}
         <TextInput
-          placeholderTextColor="#94A3B8"
-          style={[styles.input, multiline && styles.multiline]}
+          placeholderTextColor={theme.muted}
+          style={[
+            styles.input,
+            { color: theme.text },
+            multiline && styles.multiline,
+          ]}
           multiline={multiline}
           onFocus={handleFocus}
           onBlur={handleBlur}
           {...inputProps}
         />
         {rightSuffix ? (
-          <View style={styles.suffixBadge}>
-            <Text style={styles.suffixText}>{rightSuffix}</Text>
+          <View style={[styles.suffixBadge, { backgroundColor: theme.accentSoft }]}>
+            <Text style={[styles.suffixText, { color: theme.accent }]}>
+              {rightSuffix}
+            </Text>
           </View>
         ) : null}
       </Animated.View>
-      {hint ? <Text style={styles.hint}>{hint}</Text> : null}
+      {hint ? <Text style={[styles.hint, { color: theme.muted }]}>{hint}</Text> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { marginBottom: 15 },
+  wrap: { marginBottom: 14 },
   label: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '800',
-    color: colors.textSecondary,
-    marginBottom: 7,
+    marginBottom: 6,
     letterSpacing: 0.2,
   },
-  labelFocused: { color: colors.accent },
   inputBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
     borderWidth: 1.5,
-    borderColor: colors.border,
     borderRadius: radius.md,
     paddingHorizontal: 12,
   },
@@ -103,37 +129,22 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     paddingVertical: 6,
   },
-  inputBoxFocused: {
-    backgroundColor: '#FFFFFF',
-    borderColor: colors.accent,
-    shadowColor: colors.accent,
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
-  },
   iconWrap: {
     width: 34,
     height: 34,
     borderRadius: 10,
-    backgroundColor: '#E2E8F0',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 10,
   },
-  iconWrapFocused: {
-    backgroundColor: colors.accentSoft,
-  },
   input: {
     flex: 1,
-    paddingVertical: 13,
+    paddingVertical: 12,
     fontSize: 15,
     fontWeight: '600',
-    color: colors.text,
   },
-  multiline: { minHeight: 82, textAlignVertical: 'top' },
+  multiline: { minHeight: 80, textAlignVertical: 'top' },
   suffixBadge: {
-    backgroundColor: colors.accentSoft,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 8,
@@ -142,7 +153,6 @@ const styles = StyleSheet.create({
   suffixText: {
     fontSize: 12,
     fontWeight: '800',
-    color: colors.accent,
   },
-  hint: { fontSize: 12, color: colors.muted, marginTop: 5 },
+  hint: { fontSize: 12, marginTop: 5 },
 });

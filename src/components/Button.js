@@ -10,40 +10,8 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { colors, radius, shadowSoft } from '../theme';
-
-const VARIANTS = {
-  whatsapp: {
-    colors: ['#25D366', '#16A34A'],
-    fg: '#FFFFFF',
-    shadowColor: '#16A34A',
-  },
-  sms: {
-    colors: ['#3B82F6', '#1D4ED8'],
-    fg: '#FFFFFF',
-    shadowColor: '#1D4ED8',
-  },
-  primary: {
-    colors: ['#2563EB', '#1E40AF'],
-    fg: '#FFFFFF',
-    shadowColor: '#1E40AF',
-  },
-  dark: {
-    colors: ['#1E293B', '#0F172A'],
-    fg: '#FFFFFF',
-    shadowColor: '#0F172A',
-  },
-  outline: {
-    bg: '#FFFFFF',
-    fg: colors.text,
-    border: colors.border,
-  },
-  danger: {
-    bg: colors.dangerSoft,
-    fg: colors.danger,
-    border: '#FECACA',
-  },
-};
+import { useTheme } from '../context/ThemeContext';
+import { radius, shadowSoft } from '../theme';
 
 export default function Button({
   title,
@@ -56,6 +24,41 @@ export default function Button({
   small = false,
   style,
 }) {
+  const { theme } = useTheme();
+
+  const VARIANTS = {
+    whatsapp: {
+      colors: ['#17C964', '#12A150'],
+      fg: '#FFFFFF',
+      shadowColor: '#12A150',
+    },
+    sms: {
+      colors: ['#006FEE', '#004493'],
+      fg: '#FFFFFF',
+      shadowColor: '#004493',
+    },
+    primary: {
+      colors: ['#006FEE', '#005BC4'],
+      fg: '#FFFFFF',
+      shadowColor: '#005BC4',
+    },
+    dark: {
+      colors: ['#27272A', '#18181B'],
+      fg: '#FFFFFF',
+      shadowColor: '#09090B',
+    },
+    outline: {
+      bg: theme.card,
+      fg: theme.text,
+      border: theme.border,
+    },
+    danger: {
+      bg: theme.dangerSoft,
+      fg: theme.danger,
+      border: `${theme.danger}55`,
+    },
+  };
+
   const v = VARIANTS[variant] || VARIANTS.primary;
   const isDisabled = disabled || loading;
   const scale = useRef(new Animated.Value(1)).current;
@@ -158,14 +161,14 @@ const styles = StyleSheet.create({
     ...shadowSoft,
   },
   base: {
-    minHeight: 54,
+    minHeight: 52,
     borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
-  small: { minHeight: 46, paddingVertical: 8 },
+  small: { minHeight: 44, paddingVertical: 8 },
   disabled: { opacity: 0.55 },
   contentRow: {
     flexDirection: 'row',
@@ -174,5 +177,5 @@ const styles = StyleSheet.create({
   },
   text: { fontSize: 15, fontWeight: '800', letterSpacing: 0.2 },
   textSmall: { fontSize: 14 },
-  subtitle: { fontSize: 11, color: 'rgba(255,255,255,0.82)', marginTop: 1 },
+  subtitle: { fontSize: 11, color: 'rgba(255,255,255,0.85)', marginTop: 1 },
 });

@@ -5,9 +5,11 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import SetupScreen from './src/screens/SetupScreen';
 import MainScreen from './src/screens/MainScreen';
 import { loadAtelier } from './src/lib/storage';
-import { colors } from './src/theme';
+import { ThemeProvider, useTheme } from './src/context/ThemeContext';
+import { ToastProvider } from './src/components/HeroUI';
 
-export default function App() {
+function AppContent() {
+  const { theme, isDark } = useTheme();
   const [booting, setBooting] = useState(true);
   const [savedAtelier, setSavedAtelier] = useState(null); // stored on the phone
   const [session, setSession] = useState(null); // logged-in workshop
@@ -33,15 +35,15 @@ export default function App() {
 
   if (booting) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={colors.sms} />
+      <View style={[styles.center, { backgroundColor: theme.bg }]}>
+        <ActivityIndicator size="large" color={theme.accent} />
       </View>
     );
   }
 
   if (session) {
     return (
-      <SafeAreaProvider>
+      <>
         <StatusBar style="light" />
         <MainScreen
           atelier={session}
@@ -51,13 +53,13 @@ export default function App() {
           }}
           onLogout={() => setSession(null)}
         />
-      </SafeAreaProvider>
+      </>
     );
   }
 
   return (
-    <SafeAreaProvider>
-      <StatusBar style="dark" />
+    <>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       <SetupScreen
         key={savedAtelier ? 'login' : 'setup'}
         mode={savedAtelier ? 'login' : 'setup'}
@@ -68,10 +70,22 @@ export default function App() {
         }}
         onReset={() => setSavedAtelier(null)}
       />
+    </>
+  );
+}
+
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <ToastProvider>
+          <AppContent />
+        </ToastProvider>
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 });
