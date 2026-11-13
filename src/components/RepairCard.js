@@ -120,6 +120,7 @@ function getStatusMeta(statut, theme) {
 
 export default function RepairCard({
   fiche,
+  onPress,
   onWhatsApp,
   onSms,
   onDelivered,
@@ -145,7 +146,11 @@ export default function RepairCard({
     }).start();
 
   return (
-    <HeroCard style={styles.cardContainer}>
+    <HeroCard
+      isPressable={Boolean(onPress)}
+      onPress={onPress}
+      style={styles.cardContainer}
+    >
       {/* 1. CARD HEADER */}
       <HeroCard.Header style={styles.cardHeader}>
         <View style={styles.headerLeft}>

@@ -62,6 +62,7 @@ export default function RepairsListScreen({
   onUpdated,
   onRemoved,
   onRemovedMany,
+  onSelectRepair,
 }) {
   const { theme, isDark } = useTheme();
   const { showToast } = useToast();
@@ -446,6 +447,7 @@ export default function RepairsListScreen({
               key={fiche.id}
               fiche={fiche}
               busy={busyId === fiche.id}
+              onPress={onSelectRepair ? () => onSelectRepair(fiche) : undefined}
               onWhatsApp={() => setNotifyModal({ fiche, mode: 'whatsapp' })}
               onSms={() => setNotifyModal({ fiche, mode: 'sms' })}
               onEdit={openEditModal}
