@@ -12,7 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Button from './Button';
-import { HeroAvatar, HeroChip } from './HeroUI';
+import { HeroAvatar, HeroChip, HeroCloseButton } from './HeroUI';
 import { useTheme } from '../context/ThemeContext';
 import { radius, shadow } from '../theme';
 import {
@@ -529,6 +529,13 @@ export default function RepairCard({
         >
           <Pressable style={styles.modalBg} onPress={() => setViewerOpen(false)}>
             <View style={styles.modalCard}>
+              <HeroCloseButton
+                variant="overlay"
+                size="lg"
+                accessibilityLabel="Fermer l'image"
+                onPress={() => setViewerOpen(false)}
+                style={styles.modalCloseTop}
+              />
               <Image
                 source={{ uri: fiche.photo_url }}
                 style={styles.modalImage}
@@ -537,10 +544,6 @@ export default function RepairCard({
               <Text style={styles.modalCaption}>
                 {fiche.appareil} — {fiche.client_nom}
               </Text>
-              <Pressable onPress={() => setViewerOpen(false)} style={styles.modalClose}>
-                <Ionicons name="close-circle" size={18} color="#0F172A" />
-                <Text style={styles.modalCloseText}>Fermer l'image</Text>
-              </Pressable>
             </View>
           </Pressable>
         </Modal>
@@ -871,6 +874,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   modalCard: { width: '100%', alignItems: 'center' },
+  modalCloseTop: { alignSelf: 'flex-end', marginBottom: 10 },
   modalImage: { width: '100%', height: 420, borderRadius: radius.lg },
   modalCaption: { color: '#FFFFFF', fontSize: 16, fontWeight: '800', marginTop: 14 },
   modalClose: {

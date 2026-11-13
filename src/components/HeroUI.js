@@ -412,16 +412,15 @@ export function HeroSearchField({ value, onChangeText, placeholder }) {
         returnKeyType="search"
       />
       {value ? (
-        <Pressable
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-            onChangeText?.('');
-          }}
-          hitSlop={10}
-          style={styles.searchClear}
+        <HeroCloseButton
+          size="sm"
+          variant="ghost"
+          accessibilityLabel="Effacer la recherche"
+          onPress={() => onChangeText?.('')}
+          style={{ marginLeft: 4 }}
         >
           <Ionicons name="close-circle" size={19} color={theme.muted} />
-        </Pressable>
+        </HeroCloseButton>
       ) : null}
     </View>
   );
@@ -707,7 +706,12 @@ export function ToastProvider({ children }) {
                   </Text>
                 ) : null}
               </View>
-              <Ionicons name="close" size={16} color={theme.muted} />
+              <HeroCloseButton
+                size="sm"
+                variant="ghost"
+                accessibilityLabel="Fermer la notification"
+                onPress={hideToast}
+              />
             </Pressable>
           </Animated.View>
         ) : null}
@@ -720,7 +724,109 @@ export function useToast() {
   return useContext(ToastContext);
 }
 
+/* ============================================================================
+   9. HERO CLOSE BUTTON (Inspiré de CloseButton de HeroUI Native)
+   ============================================================================ */
+export function HeroCloseButton({
+  onPress,
+  variant = 'default',
+  size = 'md',
+  iconProps = {},
+  children,
+  isDisabled = false,
+  accessibilityLabel = 'Fermer',
+  style,
+}) {
+  const { theme, isDark } = useTheme();
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const sizeMap = {
+    sm: { box: 28, icon: 16 },
+    md: { box: 36, icon: 20 },
+    lg: { box: 44, icon: 23 },
+  };
+  const dims = sizeMap[size] || sizeMap.md;
+
+  const variantStyles = {
+    default: {
+      bg: isDark ? '#27272A' : '#F4F4F5',
+      border: theme.border,
+      iconColor: theme.text,
+    },
+    ghost: {
+      bg: 'transparent',
+      border: 'transparent',
+      iconColor: theme.muted,
+    },
+    overlay: {
+      bg: 'rgba(255, 255, 255, 0.2)',
+      border: 'rgba(255, 255, 255, 0.28)',
+      iconColor: '#FFFFFF',
+    },
+    danger: {
+      bg: theme.dangerSoft,
+      border: isDark ? '#7F1D1D' : '#FECDD3',
+      iconColor: theme.danger,
+    },
+  };
+  const v = variantStyles[variant] || variantStyles.default;
+
+  const animateTo = (to) =>
+    Animated.spring(scale, {
+      toValue: to,
+      useNativeDriver: true,
+      speed: 32,
+      bounciness: 10,
+    }).start();
+
+  return (
+    <Animated.View style={[{ transform: [{ scale }] }, style]}>
+      <Pressable
+        disabled={isDisabled}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        hitSlop={8}
+        onPressIn={() => {
+          if (!isDisabled) animateTo(0.88);
+        }}
+        onPressOut={() => {
+          if (!isDisabled) animateTo(1);
+        }}
+        onPress={() => {
+          if (isDisabled) return;
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+          onPress?.();
+        }}
+        style={[
+          styles.closeBtnBase,
+          {
+            width: dims.box,
+            height: dims.box,
+            borderRadius: dims.box / 2,
+            backgroundColor: v.bg,
+            borderColor: v.border,
+            borderWidth: v.border === 'transparent' ? 0 : 1,
+            opacity: isDisabled ? 0.45 : 1,
+          },
+        ]}
+      >
+        {children || (
+          <Ionicons
+            name={iconProps.name || 'close'}
+            size={iconProps.size || dims.icon}
+            color={iconProps.color || v.iconColor}
+          />
+        )}
+      </Pressable>
+    </Animated.View>
+  );
+}
+
 const styles = StyleSheet.create({
+  closeBtnBase: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   avatarZoomIcon: {
     position: 'absolute',
     right: -2,

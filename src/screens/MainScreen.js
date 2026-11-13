@@ -21,6 +21,7 @@ import Button from '../components/Button';
 import {
   HeroBottomSheet,
   HeroChip,
+  HeroCloseButton,
   HeroSwitch,
   HeroTabs,
   useToast,
@@ -443,12 +444,12 @@ export default function MainScreen({ atelier, onAtelierUpdated, onLogout }) {
             <Text style={styles.logoutCornerText}>Déconnexion</Text>
           </Pressable>
 
-          <Pressable
+          <HeroCloseButton
+            variant="overlay"
+            size="md"
+            accessibilityLabel="Fermer le panneau atelier"
             onPress={() => setAtelierModalOpen(false)}
-            style={styles.ownerHeroClose}
-          >
-            <Ionicons name="close" size={19} color="#FFFFFF" />
-          </Pressable>
+          />
         </LinearGradient>
 
         <ScrollView

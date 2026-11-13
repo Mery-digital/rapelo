@@ -21,6 +21,7 @@ import Button from '../components/Button';
 import PhotoPicker from '../components/PhotoPicker';
 import {
   HeroBottomSheet,
+  HeroCloseButton,
   HeroSearchField,
   RepairCardSkeleton,
   useToast,
@@ -587,12 +588,13 @@ export default function RepairsListScreen({
                   {notifyModal.fiche.appareil} · {notifyModal.fiche.client_tel}
                 </Text>
               </View>
-              <Pressable
+              <HeroCloseButton
+                variant="overlay"
+                size="md"
+                accessibilityLabel="Fermer l'envoi de message"
                 onPress={() => setNotifyModal(null)}
-                style={styles.choiceCloseIcon}
-              >
-                <Ionicons name="close" size={20} color="#FFFFFF" />
-              </Pressable>
+                style={{ marginLeft: 8 }}
+              />
             </LinearGradient>
 
             <ScrollView
@@ -902,12 +904,12 @@ export default function RepairsListScreen({
               </Text>
             </View>
           </View>
-          <Pressable
+          <HeroCloseButton
+            variant="default"
+            size="md"
+            accessibilityLabel="Fermer la modification"
             onPress={() => setEditModal(null)}
-            style={[styles.editCloseBtn, { backgroundColor: theme.border }]}
-          >
-            <Ionicons name="close" size={20} color={theme.text} />
-          </Pressable>
+          />
         </View>
 
         {editModal ? (
@@ -1115,6 +1117,13 @@ export default function RepairsListScreen({
           >
             {confirmModal ? (
               <>
+                <HeroCloseButton
+                  variant="ghost"
+                  size="sm"
+                  accessibilityLabel="Annuler et fermer"
+                  onPress={() => setConfirmModal(null)}
+                  style={styles.confirmCloseBtn}
+                />
                 <View
                   style={[
                     styles.confirmIconCircle,
@@ -1762,6 +1771,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 22,
     alignItems: 'center',
+  },
+  confirmCloseBtn: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    zIndex: 2,
   },
   confirmIconCircle: {
     width: 60,
