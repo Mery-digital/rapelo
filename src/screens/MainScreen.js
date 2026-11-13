@@ -21,7 +21,7 @@ import {
 } from '../context/NavigationContext';
 import { useTheme } from '../context/ThemeContext';
 import { fetchRepairs, isDemoMode } from '../lib/repairs';
-import { digitsOnly } from '../lib/messaging';
+import { digitsOnly, formatPhoneDisplay } from '../lib/messaging';
 
 function MainScreenContent({ atelier, onAtelierUpdated, onLogout }) {
   const { theme, isDark } = useTheme();
@@ -100,7 +100,7 @@ function MainScreenContent({ atelier, onAtelierUpdated, onLogout }) {
               {atelier.atelierNom}
             </Text>
             <Text style={styles.atelierSub} numberOfLines={1}>
-              {atelier.localisation} · +{digitsOnly(atelier.indicatif) || '225'} {atelier.phone}
+              {atelier.localisation} · {formatPhoneDisplay(atelier.phone, atelier.indicatif)}
             </Text>
           </View>
         </LinearGradient>

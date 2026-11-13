@@ -24,7 +24,7 @@ import { useTheme } from '../context/ThemeContext';
 import { radius, shadowSoft } from '../theme';
 import { saveAtelier, hashPassword } from '../lib/storage';
 import { syncAtelierRepairs } from '../lib/repairs';
-import { digitsOnly, formatPrice } from '../lib/messaging';
+import { digitsOnly, formatPrice, formatPhoneDisplay } from '../lib/messaging';
 
 export default function WorkshopScreen({
   atelier,
@@ -78,7 +78,10 @@ export default function WorkshopScreen({
     const cleanNom = form.atelierNom.trim();
     const cleanLoc = form.localisation.trim();
     const cleanPhone = form.phone.trim();
-    const cleanIndicatif = digitsOnly(form.indicatif) || '225';
+    let cleanIndicatif = digitsOnly(form.indicatif) || '225';
+    if (cleanIndicatif.length > 4) {
+      cleanIndicatif = cleanIndicatif.slice(0, 3) || '225';
+    }
 
     if (!cleanNom || !cleanLoc || !cleanPhone) {
       Alert.alert('Champs requis', 'Renseigne le nom, la localisation et le téléphone.');
@@ -126,37 +129,7 @@ export default function WorkshopScreen({
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
-      {/* 1. ATELIER IDENTITY CARD */}
-      <HeroCard style={styles.identityCard}>
-        <HeroCard.Header style={styles.identityHeader}>
-          <View style={styles.logoWrap}>
-            <Image
-              source={require('../../assets/logo.jpg')}
-              style={styles.logoImg}
-              resizeMode="contain"
-            />
-          </View>
-          <View style={{ flex: 1, marginLeft: 14 }}>
-            <View style={styles.badgeRow}>
-              <View style={styles.liveDot} />
-              <Text style={[styles.badgeTag, { color: theme.accent }]}>
-                ATELIER ACTIF
-              </Text>
-            </View>
-            <Text style={[styles.atelierName, { color: theme.text }]} numberOfLines={1}>
-              {atelier.atelierNom}
-            </Text>
-            <Text style={[styles.atelierLoc, { color: theme.muted }]} numberOfLines={1}>
-              {atelier.localisation}
-            </Text>
-            <Text style={[styles.atelierTel, { color: theme.textSecondary }]}>
-              +{digitsOnly(atelier.indicatif) || '225'} {atelier.phone}
-            </Text>
-          </View>
-        </HeroCard.Header>
-      </HeroCard>
-
-      {/* 2. STATISTIQUES ATELIER */}
+      {/* 1. STATISTIQUES ATELIER */}
       <HeroCard style={styles.sectionCard}>
         <HeroCard.Header>
           <Text style={[styles.sectionTitle, { color: theme.muted }]}>

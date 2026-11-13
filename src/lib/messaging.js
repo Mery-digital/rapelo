@@ -50,6 +50,42 @@ export function toInternational(phone, indicatif = '225') {
   return cc + localPart;
 }
 
+/**
+ * Clean and format a phone number for UI display (e.g. "+225 05 94 34 52 54").
+ * Guarantees a single clean phone number is displayed with no duplicate code or repetition.
+ */
+export function formatPhoneDisplay(phone = '', indicatif = '225') {
+  const rawPhone = String(phone || '').trim();
+  let rawInd = digitsOnly(indicatif || '225');
+
+  // If indicatif was accidentally saved as a full phone number (>4 digits), extract dial code
+  if (rawInd.length > 4) {
+    const matched = COUNTRY_DIAL_CODES.find((c) => rawInd.startsWith(c.code));
+    rawInd = matched ? matched.code : rawInd.slice(0, 3) || '225';
+  }
+  if (!rawInd) rawInd = '225';
+
+  let digits = digitsOnly(rawPhone);
+  if (!digits) return '';
+
+  // If phone already starts with the dial code, strip it so it is not repeated
+  if (digits.startsWith(rawInd) && digits.length >= rawInd.length + 8) {
+    digits = digits.slice(rawInd.length);
+  }
+
+  // Format local digits nicely with spaces
+  let formattedLocal = digits;
+  if (digits.length === 10) {
+    formattedLocal = `${digits.slice(0, 2)} ${digits.slice(2, 4)} ${digits.slice(4, 6)} ${digits.slice(6, 8)} ${digits.slice(8, 10)}`;
+  } else if (digits.length === 9) {
+    formattedLocal = `${digits.slice(0, 2)} ${digits.slice(2, 5)} ${digits.slice(5, 7)} ${digits.slice(7, 9)}`;
+  } else if (digits.length === 8) {
+    formattedLocal = `${digits.slice(0, 2)} ${digits.slice(2, 4)} ${digits.slice(4, 6)} ${digits.slice(6, 8)}`;
+  }
+
+  return `+${rawInd} ${formattedLocal}`;
+}
+
 export function formatPrice(value) {
   const n = Math.round(Number(value) || 0);
   return `${String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')} FCFA`;

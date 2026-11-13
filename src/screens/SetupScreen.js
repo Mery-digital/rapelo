@@ -75,11 +75,15 @@ export default function SetupScreen({ mode, savedAtelier, onDone, onReset }) {
     setLoading(true);
     try {
       const cleanPhone = phone.trim();
+      let cleanInd = digitsOnly(indicatif) || '225';
+      if (cleanInd.length > 4) {
+        cleanInd = cleanInd.slice(0, 3) || '225';
+      }
       const profile = {
         phone: cleanPhone,
         atelierNom: atelierNom.trim(),
         localisation: localisation.trim(),
-        indicatif: digitsOnly(indicatif) || '225',
+        indicatif: cleanInd,
         passwordHash: await hashPassword(digitsOnly(cleanPhone), password),
       };
       await saveAtelier(profile);
@@ -257,8 +261,9 @@ export default function SetupScreen({ mode, savedAtelier, onDone, onReset }) {
                     icon="globe-outline"
                     placeholder="Ex : 225"
                     keyboardType="numeric"
+                    maxLength={4}
                     value={indicatif}
-                    onChangeText={setIndicatif}
+                    onChangeText={(v) => setIndicatif(digitsOnly(v).slice(0, 4))}
                     hint="Côte d’Ivoire 225 · Sénégal 221 · Cameroun 237 · Mali 223 · Burkina 226"
                   />
                 </>
