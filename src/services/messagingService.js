@@ -9,6 +9,7 @@ export {
   computeBalance,
   depositMessage,
   readyMessage,
+  unrepairedMessage,
   deliveredMessage,
   reminderMessage,
   openWhatsApp,

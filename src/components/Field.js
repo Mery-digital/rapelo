@@ -139,7 +139,15 @@ export default function Field({
         />
 
         {rightSuffix ? (
-          <View style={styles.suffixWrap}>{rightSuffix}</View>
+          <View style={styles.suffixWrap}>
+            {typeof rightSuffix === 'string' || typeof rightSuffix === 'number' ? (
+              <Text style={[styles.suffixText, { color: theme.muted }]}>
+                {rightSuffix}
+              </Text>
+            ) : (
+              rightSuffix
+            )}
+          </View>
         ) : null}
       </Animated.View>
 
@@ -224,6 +232,10 @@ const styles = StyleSheet.create({
   },
   suffixWrap: {
     marginLeft: 8,
+  },
+  suffixText: {
+    fontSize: 12,
+    fontWeight: '800',
   },
   hint: {
     fontSize: 11.5,

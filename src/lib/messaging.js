@@ -113,7 +113,36 @@ export function computeBalance(prix, avance) {
 
 // ---------- Messages ----------
 
-export function depositMessage({ clientNom, appareil, prix, avance, atelier }) {
+function normalizeMessageArgs(first = {}, second) {
+  const atelier = second || first?.atelier || {};
+  const clientNom = first?.clientNom ?? first?.client_nom ?? 'Client';
+  const appareil = first?.appareil ?? 'appareil';
+  const prix = first?.prix ?? first?.prix_estime ?? 0;
+  const avance = first?.avance ?? first?.avance_payee ?? 0;
+  const statut = first?.statut ?? 'en_cours';
+  const nomAtelier = atelier?.atelierNom || first?.atelier_nom || 'notre atelier';
+  const locAtelier = atelier?.localisation || 'notre atelier';
+  const telAtelier =
+    formatPhoneDisplay(atelier?.phone || first?.atelier_tel, atelier?.indicatif) ||
+    atelier?.phone ||
+    first?.atelier_tel ||
+    '';
+
+  return {
+    clientNom,
+    appareil,
+    prix,
+    avance,
+    statut,
+    nomAtelier,
+    locAtelier,
+    telAtelier,
+  };
+}
+
+export function depositMessage(first, second) {
+  const { clientNom, appareil, prix, avance, nomAtelier, locAtelier, telAtelier } =
+    normalizeMessageArgs(first, second);
   const { total, paid, reste } = computeBalance(prix, avance);
   let financeText = '';
   if (total > 0 && paid > 0) {
@@ -129,12 +158,14 @@ export function depositMessage({ clientNom, appareil, prix, avance, atelier }) {
 
   return (
     `RAPELO\n` +
-    `Bonjour ${clientNom}, votre ${appareil} a bien été déposé chez ${atelier.atelierNom} ` +
-    `à ${atelier.localisation}.${financeText} On vous prévient dès que c'est prêt ! Infoline: ${atelier.phone}`
+    `Bonjour ${clientNom}, votre ${appareil} a bien été déposé chez ${nomAtelier} ` +
+    `à ${locAtelier}.${financeText} On vous prévient dès que c'est prêt ! Infoline: ${telAtelier}`
   );
 }
 
-export function readyMessage({ clientNom, appareil, prix, avance, atelier }) {
+export function readyMessage(first, second) {
+  const { clientNom, appareil, prix, avance, nomAtelier, locAtelier, telAtelier } =
+    normalizeMessageArgs(first, second);
   const { total, paid, reste } = computeBalance(prix, avance);
   let priceText = '';
   if (total > 0 && paid > 0) {
@@ -149,28 +180,34 @@ export function readyMessage({ clientNom, appareil, prix, avance, atelier }) {
   return (
     `RAPELO\n` +
     `Bonjour ${clientNom}, bonne nouvelle ! Votre ${appareil} est prêt. ` +
-    `Vous pouvez venir le récupérer chez ${atelier.atelierNom} à ${atelier.localisation}.${priceText} ` +
-    `Infoline: ${atelier.phone}`
+    `Vous pouvez venir le récupérer chez ${nomAtelier} à ${locAtelier}.${priceText} ` +
+    `Infoline: ${telAtelier}`
   );
 }
 
-export function unrepairedMessage({ clientNom, appareil, atelier }) {
+export function unrepairedMessage(first, second) {
+  const { clientNom, appareil, nomAtelier, locAtelier, telAtelier } =
+    normalizeMessageArgs(first, second);
   return (
     `RAPELO\n` +
-    `Bonjour ${clientNom}, concernant votre ${appareil} déposé chez ${atelier.atelierNom} ` +
-    `à ${atelier.localisation} : malheureusement la réparation n'a pas pu aboutir. ` +
-    `Vous pouvez venir récupérer votre appareil à l'atelier. Infoline: ${atelier.phone}`
+    `Bonjour ${clientNom}, concernant votre ${appareil} déposé chez ${nomAtelier} ` +
+    `à ${locAtelier} : malheureusement la réparation n'a pas pu aboutir. ` +
+    `Vous pouvez venir récupérer votre appareil à l'atelier. Infoline: ${telAtelier}`
   );
 }
 
-export function reminderMessage({ clientNom, appareil, prix, avance, statut, atelier }) {
+export const deliveredMessage = unrepairedMessage;
+
+export function reminderMessage(first, second) {
+  const { clientNom, appareil, prix, avance, statut, nomAtelier, locAtelier, telAtelier } =
+    normalizeMessageArgs(first, second);
   const { total, paid, reste } = computeBalance(prix, avance);
   if (statut === 'non_repare') {
     return (
       `RAPELO\n` +
-      `Bonjour ${clientNom}, petit rappel de ${atelier.atelierNom} (${atelier.localisation}) : ` +
+      `Bonjour ${clientNom}, petit rappel de ${nomAtelier} (${locAtelier}) : ` +
       `votre ${appareil} vous attend toujours à l'atelier. Merci de passer le récupérer dès que possible. ` +
-      `Infoline: ${atelier.phone}`
+      `Infoline: ${telAtelier}`
     );
   }
   let resteInfo = '';
@@ -182,9 +219,9 @@ export function reminderMessage({ clientNom, appareil, prix, avance, statut, ate
   }
   return (
     `RAPELO\n` +
-    `Bonjour ${clientNom}, petit rappel de ${atelier.atelierNom} (${atelier.localisation}) : ` +
+    `Bonjour ${clientNom}, petit rappel de ${nomAtelier} (${locAtelier}) : ` +
     `votre ${appareil} est réparé et prêt, il vous attend à l'atelier.${resteInfo} ` +
-    `Merci de passer le récupérer. Infoline: ${atelier.phone}`
+    `Merci de passer le récupérer. Infoline: ${telAtelier}`
   );
 }
 

@@ -418,7 +418,7 @@ export default function DashboardScreen({
                         style={[styles.clientSub, { color: theme.muted }]}
                         numberOfLines={1}
                       >
-                        {item.client_nom} · {item.panne_declaree}
+                        {item.client_nom} · {item.probleme || item.panne_declaree || 'Diagnostic en cours'}
                       </Text>
 
                       {reste > 0 ? (

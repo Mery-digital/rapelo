@@ -133,7 +133,10 @@ export default function RepairCard({
   const doneScale = useRef(new Animated.Value(1)).current;
 
   const statusMeta = getStatusMeta(fiche.statut, theme);
-  const { total, paid, reste } = computeBalance(fiche.prix, fiche.avance);
+  const { total, paid, reste } = computeBalance(
+    fiche.prix_estime ?? fiche.prix,
+    fiche.avance_payee ?? fiche.avance
+  );
   const isDelivered = fiche.statut === 'livre';
   const days = daysSince(fiche.created_at);
 

@@ -5,5 +5,6 @@ export {
   updateRepair,
   updateRepairStatus,
   deleteRepair,
+  deleteRepairsByIds,
   syncAtelierRepairs,
 } from '../lib/repairs';

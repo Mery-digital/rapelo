@@ -54,7 +54,10 @@ export default function RepairDetailScreen({
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
 
-  const { total, paid, reste } = computeBalance(fiche.prix, fiche.avance);
+  const { total, paid, reste } = computeBalance(
+    fiche.prix_estime ?? fiche.prix,
+    fiche.avance_payee ?? fiche.avance
+  );
   const days = daysSince(fiche.created_at);
   const isDelivered = fiche.statut === 'livre';
 
