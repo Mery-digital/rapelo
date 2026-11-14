@@ -11,6 +11,12 @@ export default function BottomTabBar({ activeCount = 0 }) {
 
   const TABS = [
     {
+      key: 'dashboard',
+      label: 'Accueil',
+      iconInactive: 'grid-outline',
+      iconActive: 'grid',
+    },
+    {
       key: 'repairs',
       label: 'Banc Atelier',
       iconInactive: 'construct-outline',
@@ -19,7 +25,7 @@ export default function BottomTabBar({ activeCount = 0 }) {
     },
     {
       key: 'new',
-      label: 'Nouveau dépôt',
+      label: 'Nouveau',
       iconInactive: 'add-circle-outline',
       iconActive: 'add-circle',
       isCenterAction: true,

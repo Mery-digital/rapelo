@@ -1,36 +1,24 @@
 import React, { useEffect, useState } from 'react';
-import { View, ActivityIndicator, StyleSheet, Platform } from 'react-native';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import SetupScreen from './src/screens/SetupScreen';
 import MainScreen from './src/screens/MainScreen';
-import { loadAtelier } from './src/lib/storage';
+import { loadAtelier } from './src/services/storageService';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { ToastProvider } from './src/components/HeroUI';
 
 function AppContent() {
   const { theme, isDark } = useTheme();
   const [booting, setBooting] = useState(true);
-  const [savedAtelier, setSavedAtelier] = useState(null); // stored on the phone
-  const [session, setSession] = useState(null); // logged-in workshop
+  const [savedAtelier, setSavedAtelier] = useState(null);
+  const [session, setSession] = useState(null);
 
   useEffect(() => {
     loadAtelier().then((profile) => {
       setSavedAtelier(profile);
       setBooting(false);
     });
-
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      if (typeof document !== 'undefined' && !document.querySelector('link[rel="manifest"]')) {
-        const link = document.createElement('link');
-        link.rel = 'manifest';
-        link.href = '/manifest.json';
-        document.head.appendChild(link);
-      }
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
-      }
-    }
   }, []);
 
   if (booting) {
@@ -48,7 +36,6 @@ function AppContent() {
           styles.mobileContainer,
           {
             backgroundColor: theme.bg,
-            borderColor: isDark ? '#27272A' : '#D4D4D8',
           },
         ]}
       >
@@ -111,16 +98,5 @@ const styles = StyleSheet.create({
     maxWidth: 500,
     height: '100%',
     overflow: 'hidden',
-    ...Platform.select({
-      web: {
-        borderLeftWidth: 1,
-        borderRightWidth: 1,
-        shadowColor: '#000000',
-        shadowOpacity: 0.16,
-        shadowRadius: 24,
-        shadowOffset: { width: 0, height: 6 },
-      },
-      default: {},
-    }),
   },
 });

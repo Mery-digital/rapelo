@@ -10,6 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import DashboardScreen from './DashboardScreen';
 import RepairsListScreen from './RepairsListScreen';
 import NewRepairScreen from './NewRepairScreen';
 import WorkshopScreen from './WorkshopScreen';
@@ -18,10 +19,10 @@ import BottomTabBar from '../components/BottomTabBar';
 import {
   NavigationProvider,
   useNavigation,
-} from '../context/NavigationContext';
+} from '../navigation/AppNavigator';
 import { useTheme } from '../context/ThemeContext';
-import { fetchRepairs, isDemoMode } from '../lib/repairs';
-import { digitsOnly, formatPhoneDisplay } from '../lib/messaging';
+import { fetchRepairs, isDemoMode } from '../services/repairService';
+import { formatPhoneDisplay } from '../services/messagingService';
 
 function MainScreenContent({ atelier, onAtelierUpdated, onLogout }) {
   const { theme, isDark } = useTheme();
@@ -129,7 +130,14 @@ function MainScreenContent({ atelier, onAtelierUpdated, onLogout }) {
             </Animated.View>
           ) : (
             <>
-              {activeTab === 'repairs' ? (
+              {activeTab === 'dashboard' ? (
+                <DashboardScreen
+                  atelier={atelier}
+                  repairs={repairs}
+                  loading={loading}
+                  onRefresh={load}
+                />
+              ) : activeTab === 'repairs' ? (
                 <RepairsListScreen
                   atelier={atelier}
                   repairs={repairs}
@@ -166,7 +174,7 @@ function MainScreenContent({ atelier, onAtelierUpdated, onLogout }) {
 
 export default function MainScreen(props) {
   return (
-    <NavigationProvider initialTab="repairs">
+    <NavigationProvider initialTab="dashboard">
       <MainScreenContent {...props} />
     </NavigationProvider>
   );
